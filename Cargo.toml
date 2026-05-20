@@ -1,0 +1,16 @@
+[package]
+name = "logag"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+axum = "0.8.9"
+duckdb = "1.10502.0"
+rmcp = { version = "1.7", features = ["server", "transport-streamable-http-server"] }
+schemars = "1.2.1"
+serde = "1.0.228"
+tokio = { version="1.52.3", features=["full"] }
+tokio-util = "0.7.18"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = { version = "1.11", features = ["v4", "v7", "fast-rng"] }
