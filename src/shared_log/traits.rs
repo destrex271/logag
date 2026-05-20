@@ -13,10 +13,6 @@ pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>);
 }
 
-pub trait EventContent {
-    fn get_content(&self) -> &str;
-}
-
 pub trait Event {
     fn get_event_type(&self) -> EventType;
     fn get_content(&self) -> String;
