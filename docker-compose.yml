@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: postgres_18_vector
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: mydatabase
+    ports:
+      - "5432:5432"
+    volumes:
+      # Change the internal container path to include /pg18 at the end
+      - pgdata18:/var/lib/postgresql/data/pg18
+    restart: unless-stopped
+
+volumes:
+  pgdata18:
+

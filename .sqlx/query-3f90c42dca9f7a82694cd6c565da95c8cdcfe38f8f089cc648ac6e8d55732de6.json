@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO LogEvent (id, content, timestamp, event_type)\n            VALUES ($1, $2, $3, $4)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f90c42dca9f7a82694cd6c565da95c8cdcfe38f8f089cc648ac6e8d55732de6"
+}

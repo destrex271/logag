@@ -1,4 +1,6 @@
 use anyhow;
+use clap::Parser;
+use logag::global_config::GlobalConfig;
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -15,8 +17,19 @@ const BIND_ADDR: &str = "127.0.0.1:8000";
 // TODO: Add list tools.
 //
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about=None)]
+struct CmdArgs {
+    #[arg(short, long, required = true)]
+    config_path: String,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = CmdArgs::parse();
+
+    let config = GlobalConfig::load_config(args.config_path.to_string());
+
     // sets tracing based on the environment.
     tracing_subscriber::registry()
         .with(
@@ -26,7 +39,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let service = StreamableHttpService::new(
-        || Ok(EventAggregator::new()),
+        move || Ok(EventAggregator::new(config.clone())), // Clone allocated the string again on
+                                                          // the heap. Since string points to a
+                                                          // value on heap, it cannot be copy, to
+                                                          // avoid dangling pointers.
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
