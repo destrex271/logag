@@ -9,6 +9,15 @@ pub enum EventType {
     AgentOutput,
 }
 
+impl std::fmt::Display for EventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            EventType::UserInput => write!(f, "user_input"),
+            EventType::AgentOutput => write!(f, "agent_output"),
+        }
+    }
+}
+
 pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>);
 }
@@ -16,8 +25,8 @@ pub trait SharedLog {
 pub trait Event {
     fn get_event_type(&self) -> EventType;
     fn get_content(&self) -> String;
-    fn get_id(&self) -> String;
-    fn get_timestamp(&self) -> String;
+    fn get_id(&self) -> uuid::Uuid; // Only use uuid v7.
+    fn get_timestamp(&self) -> isize;
 }
 
 #[derive(Clone)]
