@@ -1,7 +1,7 @@
 use crate::shared_log::traits::{Event, EventType};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
-use uuid::Uuid;
+use uuid::Timestamp;
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 pub struct LogContent {
@@ -13,7 +13,6 @@ pub struct LogEvent {
     event_type: EventType,
     content: LogContent,
     timestamp: String,
-    id: String,
 }
 
 impl Event for LogEvent {
@@ -25,12 +24,14 @@ impl Event for LogEvent {
         self.content.content.clone()
     }
 
-    fn get_id(&self) -> String {
-        self.id.clone()
+    fn get_id(&self) -> uuid::Uuid {
+        let seconds = self.get_timestamp();
+        let id = uuid::Uuid::new_v7(Timestamp::from_unix_time(seconds as u64, 0, 0, 0));
+        return id;
     }
 
-    fn get_timestamp(&self) -> String {
-        self.timestamp.clone()
+    fn get_timestamp(&self) -> isize {
+        self.timestamp.parse::<isize>().unwrap()
     }
 }
 
@@ -43,13 +44,10 @@ impl LogContent {
 impl LogEvent {
     pub fn new(event_type: EventType, content: String, timestamp: String) -> Self {
         let content = LogContent::new(content);
-        let uuid = Uuid::new_v4().to_string();
-
         Self {
             event_type: event_type,
             content: content,
             timestamp: timestamp,
-            id: uuid.clone(),
         }
     }
 }

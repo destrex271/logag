@@ -1,0 +1,18 @@
+pipeline:
+  quality-checks:
+    image: rust:latest
+    commands:
+      # Format check
+      - rustup component add rustfmt
+      - cargo fmt --all -- --check
+
+      # Linting checks
+      - rustup component add clippy
+      - cargo clippy -- -D warnings
+
+      # Security & Vulnerability Audits
+      - cargo install cargo-audit --force
+      - cargo audit
+
+      # Run test suite
+      - cargo test --all-targets --all-features

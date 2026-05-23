@@ -24,7 +24,7 @@ impl SharedLog for EventAggregator {
 pub struct MCPEvent {
     event_type: EventType,
     content: String,
-    timestamp: String,
+    unix_epoch_timestamp: String, // Expected format is unix epoch time.
     agent_notes: String,
 }
 
@@ -42,13 +42,13 @@ impl EventAggregator {
         Parameters(MCPEvent {
             event_type,
             content,
-            timestamp,
+            unix_epoch_timestamp,
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
         self.append_event(
             self.event_factory
-                .create_log_event(content, timestamp, event_type),
+                .create_log_event(content, unix_epoch_timestamp, event_type),
         );
         println!("{:?}", agent_notes);
         "success".to_string()

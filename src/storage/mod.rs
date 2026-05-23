@@ -1,2 +1,2 @@
-mod duckdb;
+mod postgres;
 pub mod traits;
