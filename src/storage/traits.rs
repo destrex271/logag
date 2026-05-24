@@ -1,6 +1,27 @@
-use std::error::Error;
+use std::{error::Error, str::FromStr};
+
+use serde::{Deserialize, Serialize};
 
 use crate::{global_config::GlobalConfig, shared_log::traits::Event};
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub enum StorageBackend{
+    Postgres,
+}
+
+#[derive(Debug)]
+pub struct UnknownStorageBackendError;
+
+impl FromStr for StorageBackend{
+    type Err = UnknownStorageBackendError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "postgres" => Ok(StorageBackend::Postgres),
+            _ => Err(UnknownStorageBackendError),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum StorageEngineErrors{
@@ -31,4 +52,39 @@ pub trait StorageEngine {
         where
             T: Event,
             F: Fn(uuid::Uuid, String, isize, String) -> T;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_storage_backend_from_str_postgres() {
+        let backend: StorageBackend = "postgres".parse().unwrap();
+        assert_eq!(backend, StorageBackend::Postgres);
+    }
+
+    #[test]
+    fn test_storage_backend_from_str_case_insensitive() {
+        let backend: StorageBackend = "Postgres".parse().unwrap();
+        assert_eq!(backend, StorageBackend::Postgres);
+    }
+
+    #[test]
+    fn test_storage_backend_from_str_invalid() {
+        let result: Result<StorageBackend, _> = "mysql".parse();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_storage_engine_errors_display_invalid_timestamp() {
+        let err = StorageEngineErrors::InvalidTimestamp(-1);
+        assert_eq!(format!("{}", err), "InvalidTimestamp: -1");
+    }
+
+    #[test]
+    fn test_storage_engine_errors_display_no_data_for_field() {
+        let err = StorageEngineErrors::NoDataForField("content".into());
+        assert_eq!(format!("{}", err), "NoDataForField: content");
+    }
 }

@@ -51,3 +51,22 @@ impl LogEvent {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::shared_log::traits::{Event, EventType};
+
+    use super::*;
+
+    #[test]
+    fn test_log_event_new_and_getters() {
+        let event = LogEvent::new(
+            EventType::UserInput,
+            "test content".into(),
+            "987654321".into(),
+        );
+        assert_eq!(event.get_event_type().to_string(), "user_input");
+        assert_eq!(event.get_content(), "test content");
+        assert_eq!(event.get_timestamp(), 987654321);
+    }
+}

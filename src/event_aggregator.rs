@@ -1,3 +1,6 @@
+use std::env;
+
+use crate::global_config::GlobalConfig;
 use crate::shared_log::traits::{Event, EventFactory, EventType, SharedLog};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
@@ -6,6 +9,7 @@ use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 #[derive(Clone)]
 pub struct EventAggregator {
     event_factory: EventFactory,
+    global_config: GlobalConfig,
 }
 
 impl SharedLog for EventAggregator {
@@ -30,9 +34,10 @@ pub struct MCPEvent {
 
 #[tool_router(server_handler)]
 impl EventAggregator {
-    pub fn new() -> Self {
+    pub fn new(global_config: GlobalConfig) -> Self {
         EventAggregator {
             event_factory: EventFactory::new(),
+            global_config: global_config,
         }
     }
 
@@ -46,11 +51,32 @@ impl EventAggregator {
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
-        self.append_event(
-            self.event_factory
-                .create_log_event(content, unix_epoch_timestamp, event_type),
-        );
+        self.append_event(self.event_factory.create_log_event(
+            content,
+            unix_epoch_timestamp,
+            event_type,
+        ));
         println!("{:?}", agent_notes);
         "success".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::global_config::GlobalConfig;
+    use crate::storage::traits::StorageBackend;
+
+    #[test]
+    fn test_event_aggregator_new() {
+        let config = GlobalConfig {
+            storage_backend: StorageBackend::Postgres,
+            database_connection_string: "postgres://localhost:5432/test".into(),
+        };
+        let aggregator = EventAggregator::new(config);
+        assert_eq!(
+            aggregator.global_config.database_connection_string,
+            "postgres://localhost:5432/test"
+        );
     }
 }

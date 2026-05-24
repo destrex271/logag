@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1.0.102"
 axum = "0.8.9"
 chrono = "0.4.44"
+clap = "4.6.1"
 duckdb = "1.10502.0"
 log = "0.4.29"
 paris = { version = "1.5", features = ["timestamps"] }

@@ -1846,6 +1846,7 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
+ "clap",
  "duckdb",
  "log",
  "paris",

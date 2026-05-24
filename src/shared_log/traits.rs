@@ -11,7 +11,7 @@ pub enum EventType {
 
 impl std::fmt::Display for EventType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
+        match self {
             EventType::UserInput => write!(f, "user_input"),
             EventType::AgentOutput => write!(f, "agent_output"),
         }
@@ -44,5 +44,32 @@ impl EventFactory {
         event_type: EventType,
     ) -> Box<dyn Event> {
         Box::new(LogEvent::new(event_type, content, timestamp))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_event_type_display_user_input() {
+        assert_eq!(EventType::UserInput.to_string(), "user_input");
+    }
+
+    #[test]
+    fn test_event_type_display_agent_output() {
+        assert_eq!(EventType::AgentOutput.to_string(), "agent_output");
+    }
+
+    #[test]
+    fn test_event_factory_creates_log_event() {
+        let factory = EventFactory::new();
+        let event = factory.create_log_event(
+            "hello".to_string(),
+            "1000000".to_string(),
+            EventType::UserInput,
+        );
+        assert_eq!(event.get_content(), "hello");
+        assert_eq!(event.get_timestamp(), 1000000);
     }
 }
