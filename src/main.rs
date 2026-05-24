@@ -1,5 +1,6 @@
 use anyhow;
 use clap::Parser;
+use logag::RUNTIME;
 use logag::global_config::GlobalConfig;
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
@@ -26,6 +27,15 @@ struct CmdArgs {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
+    // Capture runtime first, without runtime nothing works.
+    // This prevents modules from creating their own runtimes.
+    // If this leads to pessimistic locking, we should make a 
+    // runtime pool sort of implementation to avoid runtime explosion
+    // across the codebase.
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    RUNTIME.set(runtime).unwrap();
+
     let args = CmdArgs::parse();
 
     let config = GlobalConfig::load_config(args.config_path.to_string());

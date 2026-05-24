@@ -7,12 +7,24 @@ use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 
 #[derive(Clone)]
+struct EventAggregationManager{
+}
+
+impl EventAggregationManager{
+    fn new() -> Self{
+        EventAggregationManager {  }
+    }
+}
+
+#[derive(Clone)]
 pub struct EventAggregator {
     event_factory: EventFactory,
     global_config: GlobalConfig,
+    log_manager: EventAggregationManager,
 }
 
-impl SharedLog for EventAggregator {
+
+impl SharedLog for EventAggregationManager {
     fn append_event(&self, event: Box<dyn Event>) {
         println!(
             "{:?}, {:?}, {:?}",
@@ -38,6 +50,7 @@ impl EventAggregator {
         EventAggregator {
             event_factory: EventFactory::new(),
             global_config: global_config,
+            log_manager: EventAggregationManager::new(),
         }
     }
 
@@ -51,7 +64,7 @@ impl EventAggregator {
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
-        self.append_event(self.event_factory.create_log_event(
+        self.log_manager.append_event(self.event_factory.create_log_event(
             content,
             unix_epoch_timestamp,
             event_type,
