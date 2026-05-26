@@ -56,7 +56,7 @@ impl PostgresStorage {
     }
 }
 
-impl StorageEngine for PostgresStorage{
+impl StorageEngine<T> for PostgresStorage where T: Event{
     async fn load_storage(config: crate::global_config::GlobalConfig) -> Self {
         let storage_engine = PostgresStorage::new(
             config.database_connection_string,

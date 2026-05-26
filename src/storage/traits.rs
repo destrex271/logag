@@ -1,8 +1,16 @@
-use std::{error::Error, str::FromStr};
+use std::{error::Error, iter::Map, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{global_config::GlobalConfig, shared_log::traits::Event};
+use crate::{RUNTIME, global_config::GlobalConfig, shared_log::traits::Event, storage::postgres::PostgresStorage};
+
+
+// Base trait required for any object to be used within a storage
+// engine.
+
+pub trait BaseStorageEntity{
+    fn construct(raw_data: Map<String, Box<dyn std::any::Any>>) -> Self;
+}
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum StorageBackend{
@@ -23,6 +31,33 @@ impl FromStr for StorageBackend{
     }
 }
 
+pub struct StorageEngineFactory{
+    storage_engine_refs: Map<StorageBackend, Box<dyn StorageEngine>>,
+}
+
+impl StorageEngineFactory{
+    fn get_storage_backend(backend: StorageBackend, config: GlobalConfig) -> Result<impl StorageEngine, StorageEngineErrors>{
+        match backend{
+            StorageBackend::Postgres => {
+                let rt = RUNTIME.get().ok_or(StorageEngineErrors::UnableToSpawnBackend("unable to access async runtime for storage engine creation".to_string()))?;
+
+                Ok(
+                    rt.block_on(
+                        PostgresStorage::load_storage(
+                            config.clone()
+                        )
+                    )
+                )
+
+            },
+            _ => Err(StorageEngineErrors::UnknownStorageBackend(
+                        format!("unknown storage backend {:?}", backend)
+                    )
+                )
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum StorageEngineErrors{
     InvalidTimestamp(isize),
@@ -30,6 +65,8 @@ pub enum StorageEngineErrors{
     NoDataForField(String),
     UnableToAcquireConnection(String),
     UnableToExecuteMigrations(String),
+    UnableToSpawnBackend(String),
+    UnknownStorageBackend(String),
 }
 
 impl std::fmt::Display for StorageEngineErrors{
@@ -40,18 +77,17 @@ impl std::fmt::Display for StorageEngineErrors{
             StorageEngineErrors::InvalidTimestamp(isize) => format!("InvalidTimestamp: {}", isize),
             StorageEngineErrors::NoDataForField(content) => format!("NoDataForField: {}", content),
             StorageEngineErrors::DatabaseError(error) => format!("DatabaseError: {}", error),
+            StorageEngineErrors::UnableToSpawnBackend(content) => format!("UnableToSpawnBackend: {}", content),
+            StorageEngineErrors::UnknownStorageBackend(content) => format!("UnknownStorageBackend: {}", content),
         };
         write!(f, "{}", err_msg)
     }
 }
 
-pub trait StorageEngine {
-    async fn load_storage(config: GlobalConfig) -> Self;
+pub trait StorageEngine<T> where T: Event{
+    async fn load_storage(config: GlobalConfig) -> Self where Self:Sized;
     async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
-    async fn get_events<T, F>(&self, from_timestamp: isize, to_timestamp: isize, factory_fn: F) -> Result<Vec<T>, StorageEngineErrors>
-        where
-            T: Event,
-            F: Fn(uuid::Uuid, String, isize, String) -> T;
+    async fn get_events(&self, from_timestamp: isize, to_timestamp: isize, factory_fn: F) -> Result<Vec<T>, StorageEngineErrors>
 }
 
 #[cfg(test)]

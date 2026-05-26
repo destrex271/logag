@@ -1,6 +1,9 @@
+use std::iter::Map;
+
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 
+use crate::BaseDTO;
 use crate::shared_log::log::LogEvent;
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]

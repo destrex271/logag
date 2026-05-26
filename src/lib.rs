@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::{iter::Map, sync::OnceLock};
 
 pub mod event_aggregator;
 pub mod global_config;

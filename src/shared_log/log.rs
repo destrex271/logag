@@ -1,4 +1,5 @@
 use crate::shared_log::traits::{Event, EventType};
+use crate::storage::traits::BaseStorageEntity;
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use uuid::Timestamp;
@@ -49,6 +50,12 @@ impl LogEvent {
             content: content,
             timestamp: timestamp,
         }
+    }
+}
+
+impl BaseStorageEntity for LogEvent{
+    fn construct(raw_data: std::iter::Map<String, Box<dyn std::any::Any>>) -> Self {
+        LogEvent::new(raw_data["event_type"], raw_data["content"], raw_data["timestamp"])
     }
 }
 
