@@ -12,7 +12,7 @@ PAYLOAD=$(jq -n \
     "system_instruction": { "parts": [{ "text": $skill }] },
     "contents": [{
       "parts": [{
-        "text": "Analyze these code changes from the past 24 hours and update documentation accordingly.\n\n```\n" + $diff + "\n```"
+        "text": "Analyze these code changes from the past 24 hours and update documentation accordingly.\n\n```\n\($diff)\n```"
       }]
     }],
     "generationConfig": {
