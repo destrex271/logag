@@ -1,3 +1,4 @@
+use crate::RUNTIME;
 use crate::shared_log::traits::Event;
 use crate::storage::traits::{
     StorageEngine,
@@ -12,6 +13,7 @@ use uuid::Uuid;
 const MAX_CONNECTIONS: u8 = 5;
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+#[derive(Clone)]
 pub struct PostgresStorage {
     connection_string: String,
     connection_pool: Pool<Postgres>
@@ -56,13 +58,16 @@ impl PostgresStorage {
     }
 }
 
+#[async_trait::async_trait]
 impl StorageEngine for PostgresStorage{
-    async fn load_storage(config: crate::global_config::GlobalConfig) -> Self {
+    fn new(config: crate::global_config::GlobalConfig) -> Self {
         let storage_engine = PostgresStorage::new(
             config.database_connection_string,
         );
 
-        match storage_engine.run_migration().await{
+        let rt = RUNTIME.get().unwrap(); // TODO(destrex271): Improve exception handling.
+
+        match rt.block_on(storage_engine.run_migration()){
             Ok(_) => storage_engine,
             Err(err) => panic!("{}", err)
         }
@@ -106,7 +111,7 @@ impl StorageEngine for PostgresStorage{
         StorageEngineErrors
     > where 
         T: Event,
-        F: Fn(uuid::Uuid, String, isize, String) -> T
+        F: Fn(uuid::Uuid, String, isize, String) -> T + Send
     {
         
         let begin: DateTime<Utc> = DateTime::from_timestamp(from_timestamp as i64, 0).ok_or(

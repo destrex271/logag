@@ -22,7 +22,8 @@ pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>);
 }
 
-pub trait Event {
+#[async_trait::async_trait]
+pub trait Event: Send + Sync {
     fn get_event_type(&self) -> EventType;
     fn get_content(&self) -> String;
     fn get_id(&self) -> uuid::Uuid; // Only use uuid v7.

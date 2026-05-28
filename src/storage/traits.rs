@@ -2,7 +2,7 @@ use std::{error::Error, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{global_config::GlobalConfig, shared_log::traits::Event};
+use crate::{global_config::GlobalConfig, shared_log::traits::Event, storage::postgres::PostgresStorage};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum StorageBackend{
@@ -19,6 +19,16 @@ impl FromStr for StorageBackend{
         match s.to_lowercase().as_str() {
             "postgres" => Ok(StorageBackend::Postgres),
             _ => Err(UnknownStorageBackendError),
+        }
+    }
+}
+
+pub struct StorageBackendProvider{}
+
+impl StorageBackendProvider{
+    pub fn get_storage_backend(config: GlobalConfig) -> Box<dyn StorageEngine> {
+        match config.storage_backend {
+            StorageBackend::Postgres => Box::new(PostgresStorage::new(config)),
         }
     }
 }
@@ -45,13 +55,16 @@ impl std::fmt::Display for StorageEngineErrors{
     }
 }
 
-pub trait StorageEngine {
-    async fn load_storage(config: GlobalConfig) -> Self;
+
+#[async_trait::async_trait]
+pub trait StorageEngine: Send + Sync + 'static {
+    fn new(config: GlobalConfig) -> Self where Self: Sized;
     async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
     async fn get_events<T, F>(&self, from_timestamp: isize, to_timestamp: isize, factory_fn: F) -> Result<Vec<T>, StorageEngineErrors>
         where
             T: Event,
-            F: Fn(uuid::Uuid, String, isize, String) -> T;
+            F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
+            Self: Sized;
 }
 
 #[cfg(test)]

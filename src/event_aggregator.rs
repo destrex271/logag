@@ -1,18 +1,31 @@
-use std::env;
-
 use crate::global_config::GlobalConfig;
 use crate::shared_log::traits::{Event, EventFactory, EventType, SharedLog};
+use crate::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 
-#[derive(Clone)]
 pub struct EventAggregator {
     event_factory: EventFactory,
     global_config: GlobalConfig,
+    shared_log: AgentRecorder, // Split into registry pattern if different types of shared logs pop
+                               // up.
 }
 
-impl SharedLog for EventAggregator {
+struct AgentRecorder {
+    storage: Box<dyn StorageEngine>,
+}
+
+impl AgentRecorder {
+    fn new(config: GlobalConfig) -> Self {
+        let storage_engine = StorageBackendProvider::get_storage_backend(config);
+        AgentRecorder {
+            storage: storage_engine,
+        }
+    }
+}
+
+impl SharedLog for AgentRecorder {
     fn append_event(&self, event: Box<dyn Event>) {
         println!(
             "{:?}, {:?}, {:?}",
@@ -32,11 +45,18 @@ pub struct MCPEvent {
     agent_notes: String,
 }
 
+impl Clone for EventAggregator {
+    fn clone(&self) -> Self {
+        EventAggregator::new(self.global_config.clone())
+    }
+}
+
 #[tool_router(server_handler)]
 impl EventAggregator {
     pub fn new(global_config: GlobalConfig) -> Self {
         EventAggregator {
             event_factory: EventFactory::new(),
+            shared_log: AgentRecorder::new(global_config.clone()),
             global_config: global_config,
         }
     }
@@ -51,11 +71,12 @@ impl EventAggregator {
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
-        self.append_event(self.event_factory.create_log_event(
-            content,
-            unix_epoch_timestamp,
-            event_type,
-        ));
+        self.shared_log
+            .append_event(self.event_factory.create_log_event(
+                content,
+                unix_epoch_timestamp,
+                event_type,
+            ));
         println!("{:?}", agent_notes);
         "success".to_string()
     }
@@ -67,8 +88,8 @@ mod tests {
     use crate::global_config::GlobalConfig;
     use crate::storage::traits::StorageBackend;
 
-    #[test]
-    fn test_event_aggregator_new() {
+    #[tokio::test]
+    async fn test_event_aggregator_new() {
         let config = GlobalConfig {
             storage_backend: StorageBackend::Postgres,
             database_connection_string: "postgres://localhost:5432/test".into(),
