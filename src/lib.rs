@@ -6,4 +6,4 @@ pub mod global_config;
 mod shared_log;
 mod storage;
 
-static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+pub(crate) static RUNTIME: OnceLock<Runtime> = OnceLock::new();

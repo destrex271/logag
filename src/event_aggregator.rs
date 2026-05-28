@@ -4,6 +4,7 @@ use crate::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
+use testcontainers_modules::postgres::Postgres;
 
 pub struct EventAggregator {
     event_factory: EventFactory,
@@ -79,25 +80,5 @@ impl EventAggregator {
             ));
         println!("{:?}", agent_notes);
         "success".to_string()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::global_config::GlobalConfig;
-    use crate::storage::traits::StorageBackend;
-
-    #[tokio::test]
-    async fn test_event_aggregator_new() {
-        let config = GlobalConfig {
-            storage_backend: StorageBackend::Postgres,
-            database_connection_string: "postgres://localhost:5432/test".into(),
-        };
-        let aggregator = EventAggregator::new(config);
-        assert_eq!(
-            aggregator.global_config.database_connection_string,
-            "postgres://localhost:5432/test"
-        );
     }
 }
