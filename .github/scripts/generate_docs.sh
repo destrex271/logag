@@ -6,8 +6,8 @@ SKILL=$(cat live_doc_skill.md | jq -Rs .)
 DIFF=$(cat /tmp/changes.diff | jq -Rs .)
 
 PAYLOAD=$(jq -n \
-  --arg skill "$SKILL" \
-  --arg diff "$DIFF" \
+  --argjson skill "$SKILL" \
+  --argjson diff "$DIFF" \
   '{
     "system_instruction": { "parts": [{ "text": $skill }] },
     "contents": [{
@@ -24,7 +24,7 @@ PAYLOAD=$(jq -n \
 echo "$PAYLOAD" > /tmp/gemini_payload.json
 
 curl -s -X POST \
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
   -H "Content-Type: application/json" \
   -d @/tmp/gemini_payload.json > /tmp/gemini_response.json
 
