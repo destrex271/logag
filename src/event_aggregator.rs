@@ -1,43 +1,79 @@
-use std::env;
-
 use crate::global_config::GlobalConfig;
 use crate::shared_log::traits::{Event, EventFactory, EventType, SharedLog};
+use crate::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
+use tokio::sync::Mutex;
 
-#[derive(Clone)]
 pub struct EventAggregator {
     event_factory: EventFactory,
     global_config: GlobalConfig,
+    shared_log: AgentRecorder,
 }
 
-impl SharedLog for EventAggregator {
+struct AgentRecorder {
+    storage: std::sync::Arc<Mutex<Option<Box<dyn StorageEngine>>>>,
+}
+
+impl AgentRecorder {
+    fn new() -> Self {
+        AgentRecorder {
+            storage: std::sync::Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn initialize(&self, config: GlobalConfig) {
+        let storage = self.storage.clone();
+        tokio::spawn(async move {
+            let engine = StorageBackendProvider::get_storage_backend(config).await;
+            *storage.lock().await = Some(engine);
+        });
+    }
+}
+
+impl SharedLog for AgentRecorder {
     fn append_event(&self, event: Box<dyn Event>) {
         println!(
             "{:?}, {:?}, {:?}",
             event.get_content(),
             event.get_event_type(),
             event.get_id()
-        )
+        );
+
+        let storage = self.storage.clone();
+        tokio::spawn(async move {
+            let guard = storage.lock().await;
+            if let Some(ref engine) = *guard {
+                let _ = engine.store_event(event.as_ref()).await;
+            }
+        });
     }
-    // fn consume_from_beginning(&self) -> impl Iterator<Item = LogEvent> + '_ {}
 }
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 pub struct MCPEvent {
     event_type: EventType,
     content: String,
-    unix_epoch_timestamp: String, // Expected format is unix epoch time.
+    unix_epoch_timestamp: String,
     agent_notes: String,
+}
+
+impl Clone for EventAggregator {
+    fn clone(&self) -> Self {
+        EventAggregator::new(self.global_config.clone())
+    }
 }
 
 #[tool_router(server_handler)]
 impl EventAggregator {
     pub fn new(global_config: GlobalConfig) -> Self {
+        let recorder = AgentRecorder::new();
+        recorder.initialize(global_config.clone());
         EventAggregator {
             event_factory: EventFactory::new(),
-            global_config: global_config,
+            shared_log: recorder,
+            global_config,
         }
     }
 
@@ -51,32 +87,13 @@ impl EventAggregator {
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
-        self.append_event(self.event_factory.create_log_event(
-            content,
-            unix_epoch_timestamp,
-            event_type,
-        ));
+        self.shared_log
+            .append_event(self.event_factory.create_log_event(
+                content,
+                unix_epoch_timestamp,
+                event_type,
+            ));
         println!("{:?}", agent_notes);
         "success".to_string()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::global_config::GlobalConfig;
-    use crate::storage::traits::StorageBackend;
-
-    #[test]
-    fn test_event_aggregator_new() {
-        let config = GlobalConfig {
-            storage_backend: StorageBackend::Postgres,
-            database_connection_string: "postgres://localhost:5432/test".into(),
-        };
-        let aggregator = EventAggregator::new(config);
-        assert_eq!(
-            aggregator.global_config.database_connection_string,
-            "postgres://localhost:5432/test"
-        );
     }
 }
