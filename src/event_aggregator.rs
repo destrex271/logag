@@ -4,25 +4,31 @@ use crate::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
-use testcontainers_modules::postgres::Postgres;
+use tokio::sync::Mutex;
 
 pub struct EventAggregator {
     event_factory: EventFactory,
     global_config: GlobalConfig,
-    shared_log: AgentRecorder, // Split into registry pattern if different types of shared logs pop
-                               // up.
+    shared_log: AgentRecorder,
 }
 
 struct AgentRecorder {
-    storage: Box<dyn StorageEngine>,
+    storage: std::sync::Arc<Mutex<Option<Box<dyn StorageEngine>>>>,
 }
 
 impl AgentRecorder {
-    fn new(config: GlobalConfig) -> Self {
-        let storage_engine = StorageBackendProvider::get_storage_backend(config);
+    fn new() -> Self {
         AgentRecorder {
-            storage: storage_engine,
+            storage: std::sync::Arc::new(Mutex::new(None)),
         }
+    }
+
+    fn initialize(&self, config: GlobalConfig) {
+        let storage = self.storage.clone();
+        tokio::spawn(async move {
+            let engine = StorageBackendProvider::get_storage_backend(config).await;
+            *storage.lock().await = Some(engine);
+        });
     }
 }
 
@@ -33,16 +39,23 @@ impl SharedLog for AgentRecorder {
             event.get_content(),
             event.get_event_type(),
             event.get_id()
-        )
+        );
+
+        let storage = self.storage.clone();
+        tokio::spawn(async move {
+            let guard = storage.lock().await;
+            if let Some(ref engine) = *guard {
+                let _ = engine.store_event(event.as_ref()).await;
+            }
+        });
     }
-    // fn consume_from_beginning(&self) -> impl Iterator<Item = LogEvent> + '_ {}
 }
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 pub struct MCPEvent {
     event_type: EventType,
     content: String,
-    unix_epoch_timestamp: String, // Expected format is unix epoch time.
+    unix_epoch_timestamp: String,
     agent_notes: String,
 }
 
@@ -55,10 +68,12 @@ impl Clone for EventAggregator {
 #[tool_router(server_handler)]
 impl EventAggregator {
     pub fn new(global_config: GlobalConfig) -> Self {
+        let recorder = AgentRecorder::new();
+        recorder.initialize(global_config.clone());
         EventAggregator {
             event_factory: EventFactory::new(),
-            shared_log: AgentRecorder::new(global_config.clone()),
-            global_config: global_config,
+            shared_log: recorder,
+            global_config,
         }
     }
 

@@ -1,4 +1,3 @@
-use crate::RUNTIME;
 use crate::shared_log::traits::Event;
 use crate::storage::traits::{
     StorageEngine,
@@ -60,14 +59,12 @@ impl PostgresStorage {
 
 #[async_trait::async_trait]
 impl StorageEngine for PostgresStorage{
-    fn new(config: crate::global_config::GlobalConfig) -> Self {
+    async fn load_storage(config: crate::global_config::GlobalConfig) -> Self {
         let storage_engine = PostgresStorage::new(
             config.database_connection_string,
         );
 
-        let rt = RUNTIME.get().unwrap(); // TODO(destrex271): Improve exception handling.
-
-        match rt.block_on(storage_engine.run_migration()){
+        match storage_engine.run_migration().await {
             Ok(_) => storage_engine,
             Err(err) => panic!("{}", err)
         }
