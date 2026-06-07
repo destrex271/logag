@@ -1,14 +1,12 @@
 use anyhow;
 use clap::Parser;
-use logag::global_config::GlobalConfig;
-use rmcp::transport::StreamableHttpServerConfig;
-use rmcp::transport::streamable_http_server::StreamableHttpService;
-use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use tokio;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-
 use logag::event_aggregator::EventAggregator;
+use logag::global_config::GlobalConfig;
+use logag::observability::Observability;
+use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::transport::streamable_http_server::StreamableHttpService;
+use rmcp::transport::StreamableHttpServerConfig;
+use tokio;
 
 const BIND_ADDR: &str = "127.0.0.1:8000";
 
@@ -30,13 +28,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = GlobalConfig::load_config(args.config_path.to_string());
 
-    // sets tracing based on the environment.
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "debug".to_string().into()),
-        )
-        .init();
+    Observability::init();
 
     let service = StreamableHttpService::new(
         move || Ok(EventAggregator::new(config.clone())), // Clone allocated the string again on

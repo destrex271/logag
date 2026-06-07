@@ -34,11 +34,11 @@ impl AgentRecorder {
 
 impl SharedLog for AgentRecorder {
     fn append_event(&self, event: Box<dyn Event>) {
-        println!(
-            "{:?}, {:?}, {:?}",
-            event.get_content(),
-            event.get_event_type(),
-            event.get_id()
+        tracing::info!(
+            content = %event.get_content(),
+            event_type = %event.get_event_type(),
+            id = %event.get_id(),
+            "appended event"
         );
 
         let storage = self.storage.clone();
@@ -94,6 +94,7 @@ impl EventAggregator {
                 event_type,
             ));
         println!("{:?}", agent_notes);
+        tracing::info!(agent_notes = %agent_notes, "add_event called");
         "success".to_string()
     }
 }
