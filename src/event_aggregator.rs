@@ -4,7 +4,7 @@ use crate::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
-use tokio::sync::Mutex;
+use tokio::sync::OnceCell;
 
 pub struct EventAggregator {
     event_factory: EventFactory,
@@ -13,13 +13,13 @@ pub struct EventAggregator {
 }
 
 struct AgentRecorder {
-    storage: std::sync::Arc<Mutex<Option<Box<dyn StorageEngine>>>>,
+    storage: std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>,
 }
 
 impl AgentRecorder {
     fn new() -> Self {
         AgentRecorder {
-            storage: std::sync::Arc::new(Mutex::new(None)),
+            storage: std::sync::Arc::new(OnceCell::new()),
         }
     }
 
@@ -27,7 +27,7 @@ impl AgentRecorder {
         let storage = self.storage.clone();
         tokio::spawn(async move {
             let engine = StorageBackendProvider::get_storage_backend(config).await;
-            *storage.lock().await = Some(engine);
+            let _ = storage.set(engine);
         });
     }
 }
@@ -43,8 +43,7 @@ impl SharedLog for AgentRecorder {
 
         let storage = self.storage.clone();
         tokio::spawn(async move {
-            let guard = storage.lock().await;
-            if let Some(ref engine) = *guard {
+            if let Some(engine) = storage.get() {
                 let _ = engine.store_event(event.as_ref()).await;
             }
         });
@@ -96,5 +95,142 @@ impl EventAggregator {
         println!("{:?}", agent_notes);
         tracing::info!(agent_notes = %agent_notes, "add_event called");
         "success".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shared_log::traits::{Event, EventType};
+    use crate::storage::traits::{StorageEngine, StorageEngineErrors};
+    use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct MockStorageEngine {
+        store_count: std::sync::Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl StorageEngine for MockStorageEngine {
+        async fn load_storage(_config: GlobalConfig) -> Self {
+            MockStorageEngine {
+                store_count: std::sync::Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        async fn store_event(&self, _event: &dyn Event) -> Result<(), StorageEngineErrors> {
+            self.store_count.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn get_events<T, F>(
+            &self,
+            _from_timestamp: isize,
+            _to_timestamp: isize,
+            _factory_fn: F,
+        ) -> Result<Vec<T>, StorageEngineErrors>
+        where
+            T: Event,
+            F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
+            Self: Sized,
+        {
+            Ok(Vec::new())
+        }
+    }
+
+    #[cfg(test)]
+    impl AgentRecorder {
+        fn new_with_storage(engine: Box<dyn StorageEngine>) -> Self {
+            let cell = std::sync::Arc::new(OnceCell::new());
+            let _ = cell.set(engine);
+            AgentRecorder { storage: cell }
+        }
+    }
+
+    #[test]
+    fn test_agent_recorder_new_creates_empty_storage() {
+        let recorder = AgentRecorder::new();
+        assert!(recorder.storage.get().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_agent_recorder_append_event_no_storage() {
+        let recorder = AgentRecorder::new();
+        let event = EventFactory::new()
+            .create_log_event("test".into(), "1000000".into(), EventType::UserInput);
+        recorder.append_event(event);
+        // Give spawned task time to attempt (and skip) the store
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    #[tokio::test]
+    async fn test_agent_recorder_append_event_with_storage() {
+        let store_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = Box::new(MockStorageEngine {
+            store_count: store_count.clone(),
+        });
+        let recorder = AgentRecorder::new_with_storage(engine);
+
+        let event = EventFactory::new()
+            .create_log_event("test".into(), "1000000".into(), EventType::UserInput);
+        recorder.append_event(event);
+
+        // Give the spawned task time to execute
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert_eq!(store_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_agent_recorder_append_event_multiple() {
+        let store_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = Box::new(MockStorageEngine {
+            store_count: store_count.clone(),
+        });
+        let recorder = AgentRecorder::new_with_storage(engine);
+
+        for i in 0..5 {
+            let event = EventFactory::new().create_log_event(
+                format!("event-{}", i),
+                format!("{}", 1000000 + i),
+                EventType::UserInput,
+            );
+            recorder.append_event(event);
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(store_count.load(Ordering::SeqCst), 5);
+    }
+
+    #[tokio::test]
+    async fn test_event_aggregator_add_event_with_storage() {
+        let store_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = Box::new(MockStorageEngine {
+            store_count: store_count.clone(),
+        });
+        let recorder = AgentRecorder::new_with_storage(engine);
+        let factory = EventFactory::new();
+        let global_config = GlobalConfig {
+            storage_backend: crate::storage::traits::StorageBackend::Postgres,
+            database_connection_string: "postgres://localhost:5432/test".into(),
+        };
+
+        let aggregator = EventAggregator {
+            event_factory: factory,
+            global_config,
+            shared_log: recorder,
+        };
+
+        let mcp_event = MCPEvent {
+            event_type: EventType::AgentOutput,
+            content: "test output".into(),
+            unix_epoch_timestamp: "2000000".into(),
+            agent_notes: "notes".into(),
+        };
+
+        let result = aggregator.add_event(Parameters(mcp_event));
+        assert_eq!(result, "success");
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert_eq!(store_count.load(Ordering::SeqCst), 1);
     }
 }
