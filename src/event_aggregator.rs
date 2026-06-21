@@ -156,8 +156,11 @@ mod tests {
     #[tokio::test]
     async fn test_agent_recorder_append_event_no_storage() {
         let recorder = AgentRecorder::new();
-        let event = EventFactory::new()
-            .create_log_event("test".into(), "1000000".into(), EventType::UserInput);
+        let event = EventFactory::new().create_log_event(
+            "test".into(),
+            "1000000".into(),
+            EventType::UserInput,
+        );
         recorder.append_event(event);
         // Give spawned task time to attempt (and skip) the store
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -171,8 +174,11 @@ mod tests {
         });
         let recorder = AgentRecorder::new_with_storage(engine);
 
-        let event = EventFactory::new()
-            .create_log_event("test".into(), "1000000".into(), EventType::UserInput);
+        let event = EventFactory::new().create_log_event(
+            "test".into(),
+            "1000000".into(),
+            EventType::UserInput,
+        );
         recorder.append_event(event);
 
         // Give the spawned task time to execute

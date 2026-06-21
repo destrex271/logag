@@ -2,11 +2,13 @@ use std::{error::Error, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{global_config::GlobalConfig, shared_log::traits::Event, storage::postgres::PostgresStorage};
+use crate::{
+    global_config::GlobalConfig, shared_log::traits::Event, storage::postgres::PostgresStorage,
+};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
-pub enum StorageBackend{
+pub enum StorageBackend {
     Postgres,
 }
 
@@ -19,7 +21,7 @@ impl std::fmt::Display for UnknownStorageBackendError {
     }
 }
 
-impl FromStr for StorageBackend{
+impl FromStr for StorageBackend {
     type Err = UnknownStorageBackendError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -30,9 +32,9 @@ impl FromStr for StorageBackend{
     }
 }
 
-pub struct StorageBackendProvider{}
+pub struct StorageBackendProvider {}
 
-impl StorageBackendProvider{
+impl StorageBackendProvider {
     pub async fn get_storage_backend(config: GlobalConfig) -> Box<dyn StorageEngine> {
         match config.storage_backend {
             StorageBackend::Postgres => Box::new(PostgresStorage::load_storage(config).await),
@@ -41,7 +43,7 @@ impl StorageBackendProvider{
 }
 
 #[derive(Debug)]
-pub enum StorageEngineErrors{
+pub enum StorageEngineErrors {
     InvalidTimestamp(isize),
     DatabaseError(Box<dyn Error>),
     NoDataForField(String),
@@ -49,11 +51,15 @@ pub enum StorageEngineErrors{
     UnableToExecuteMigrations(String),
 }
 
-impl std::fmt::Display for StorageEngineErrors{
+impl std::fmt::Display for StorageEngineErrors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let err_msg: String = match self{
-            StorageEngineErrors::UnableToExecuteMigrations(content) => format!("UnableToExecuteMigrations: {}", content),
-            StorageEngineErrors::UnableToAcquireConnection(content) => format!("UnableToAcquireConnection: {}", content),
+        let err_msg: String = match self {
+            StorageEngineErrors::UnableToExecuteMigrations(content) => {
+                format!("UnableToExecuteMigrations: {}", content)
+            }
+            StorageEngineErrors::UnableToAcquireConnection(content) => {
+                format!("UnableToAcquireConnection: {}", content)
+            }
             StorageEngineErrors::InvalidTimestamp(isize) => format!("InvalidTimestamp: {}", isize),
             StorageEngineErrors::NoDataForField(content) => format!("NoDataForField: {}", content),
             StorageEngineErrors::DatabaseError(error) => format!("DatabaseError: {}", error),
@@ -62,16 +68,22 @@ impl std::fmt::Display for StorageEngineErrors{
     }
 }
 
-
 #[async_trait::async_trait]
 pub trait StorageEngine: Send + Sync + 'static {
-    async fn load_storage(config: GlobalConfig) -> Self where Self: Sized;
+    async fn load_storage(config: GlobalConfig) -> Self
+    where
+        Self: Sized;
     async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
-    async fn get_events<T, F>(&self, from_timestamp: isize, to_timestamp: isize, factory_fn: F) -> Result<Vec<T>, StorageEngineErrors>
-        where
-            T: Event,
-            F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
-            Self: Sized;
+    async fn get_events<T, F>(
+        &self,
+        from_timestamp: isize,
+        to_timestamp: isize,
+        factory_fn: F,
+    ) -> Result<Vec<T>, StorageEngineErrors>
+    where
+        T: Event,
+        F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
+        Self: Sized;
 }
 
 #[cfg(test)]
@@ -143,7 +155,8 @@ mod tests {
 
     #[test]
     fn test_storage_engine_errors_display_database_error() {
-        let inner = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
+        let inner =
+            std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
         let err = StorageEngineErrors::DatabaseError(Box::new(inner));
         assert_eq!(format!("{}", err), "DatabaseError: connection refused");
     }
@@ -151,10 +164,7 @@ mod tests {
     #[test]
     fn test_storage_engine_errors_display_unable_to_acquire_connection() {
         let err = StorageEngineErrors::UnableToAcquireConnection("timeout".into());
-        assert_eq!(
-            format!("{}", err),
-            "UnableToAcquireConnection: timeout"
-        );
+        assert_eq!(format!("{}", err), "UnableToAcquireConnection: timeout");
     }
 
     #[test]
@@ -170,7 +180,7 @@ mod tests {
 
     #[test]
     fn test_storage_backend_provider_construct() {
-        let provider = StorageBackendProvider{};
+        let provider = StorageBackendProvider {};
         // verify the provider type satisfies Send + Sync
         fn assert_send_sync<T: Send + Sync>(_: &T) {}
         assert_send_sync(&provider);
