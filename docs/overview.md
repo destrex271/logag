@@ -1,90 +1,172 @@
-Based on the code changes from the past 24 hours, here are the updates to the documentation. 
+Based on the analysis of the commits pushed in the past 24 hours, the changes consist entirely of **code formatting and import reordering** (standardizing style via `rustfmt`) across `event_aggregator.rs`, `main.rs`, `storage/postgres.rs`, and `storage/traits.rs`. 
 
-We have:
-1. Created a new documentation file for the newly introduced `observability` module: `docs/observability.md`.
-2. Updated the existing `docs/event_aggregator.md` to reflect the transition from standard standard output printing (`println!`) to structured logging (`tracing`).
+There are no functional changes, API modifications, or configuration updates. However, to ensure the documentation folder mirrors the codebase perfectly and remains completely up-to-date, the documentation files for the **Storage** and **Event Aggregator** components have been reviewed and verified.
+
+Below are the updated/verified markdown files for the affected components.
 
 ---
 
-### New File: `docs/observability.md`
+### File: `docs/storage/traits.md`
 
 ```markdown
-# Observability
+# Storage Traits and Backends
 
-The `observability` module provides a centralized, thread-safe mechanism for initializing application-wide logging and tracing. It configures structured diagnostics to help monitor and debug the system.
+This module defines the core abstractions, errors, and provider mechanisms for the storage layer of the logging system.
 
-## Overview
+## StorageBackend
 
-The module exposes the `Observability` utility, which configures the `tracing` ecosystem. It ensures that logging subscribers are registered exactly once during the application lifecycle.
-
-## Components
-
-### `Observability`
-
-A unit struct used to manage the initialization of the tracing subscriber.
-
-#### Methods
-
-##### `init() -> &'static Self`
-Initializes the global tracing subscriber. 
-* **Thread Safety**: Uses `std::sync::OnceLock` internally to guarantee that initialization logic is executed only once, even if called from multiple threads.
-* **Configuration**:
-  * Registers a formatting layer (`tracing_subscriber::fmt::layer()`) to format log events.
-  * Registers an environment filter (`tracing_subscriber::EnvFilter`) which reads the log level from the environment (e.g., `RUST_LOG`). If no environment variable is set, it defaults to the `debug` log level.
-
-## Usage Example
-
-Initialize observability at the very beginning of the application entry point (typically in `main.rs`):
+An enum representing the supported database backends.
 
 ```rust
-use logag::observability::Observability;
+pub enum StorageBackend {
+    Postgres,
+}
+```
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Initialize structured logging
-    Observability::init();
+- **Serialization**: Serializes to lowercase (e.g., `"postgres"`).
+- **Parsing**: Implements `FromStr`, allowing initialization from configuration strings. Throws an `UnknownStorageBackendError` if an unsupported backend is provided.
 
-    // Application logic...
-    Ok(())
+## StorageBackendProvider
+
+A factory utility used to resolve and instantiate the concrete storage engine configured in `GlobalConfig`.
+
+### Methods
+
+#### `get_storage_backend`
+```rust
+pub async fn get_storage_backend(config: GlobalConfig) -> Box<dyn StorageEngine>
+```
+Returns a thread-safe, heap-allocated implementation of `StorageEngine` matching the configured `StorageBackend`.
+
+---
+
+## StorageEngineErrors
+
+An enumeration of errors that can occur during storage operations:
+
+| Variant | Description |
+| :--- | :--- |
+| `InvalidTimestamp(isize)` | The provided epoch timestamp cannot be converted to a valid UTC datetime. |
+| `DatabaseError(Box<dyn Error>)` | An underlying database driver error occurred. |
+| `NoDataForField(String)` | A expected column or field was missing from the retrieved database row. |
+| `UnableToAcquireConnection(String)` | Failed to retrieve a connection from the connection pool. |
+| `UnableToExecuteMigrations(String)` | Database migrations failed to run during initialization. |
+
+---
+
+## StorageEngine Trait
+
+Any database backend must implement the `StorageEngine` trait to handle event persistence and retrieval.
+
+```rust
+#[async_trait::async_trait]
+pub trait StorageEngine: Send + Sync + 'static {
+    /// Initializes the storage engine using the provided global configuration.
+    async fn load_storage(config: GlobalConfig) -> Self where Self: Sized;
+
+    /// Persists a single event implementing the `Event` trait.
+    async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
+
+    /// Retrieves a range of events between two timestamps, reconstructing them using a factory function.
+    async fn get_events<T, F>(
+        &self,
+        from_timestamp: isize,
+        to_timestamp: isize,
+        factory_fn: F,
+    ) -> Result<Vec<T>, StorageEngineErrors>
+    where
+        T: Event,
+        F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
+        Self: Sized;
 }
 ```
 ```
 
 ---
 
-### Updated File: `docs/event_aggregator.md`
+### File: `docs/storage/postgres.md`
+
+```markdown
+# Postgres Storage Engine
+
+The `PostgresStorage` struct is the concrete implementation of the `StorageEngine` trait using PostgreSQL as the persistence layer. It utilizes `sqlx` for asynchronous, type-safe SQL queries.
+
+## Design & Architecture
+
+- **Connection Pooling**: Uses `sqlx::Pool<Postgres>` with a maximum connection limit of `5` (`MAX_CONNECTIONS`).
+- **Lazy Connection**: Connections are established lazily (`connect_lazy`) to prevent initialization blockages.
+- **Automated Migrations**: Embedded migrations are executed automatically upon storage initialization using `sqlx::migrate!("./migrations")`.
+
+## Struct Definition
+
+```rust
+#[derive(Clone)]
+pub struct PostgresStorage {
+    connection_string: String,
+    connection_pool: Pool<Postgres>,
+}
+```
+
+## Internal Methods
+
+### `new`
+```rust
+fn new(connection_string: String) -> Self
+```
+Initializes the lazy connection pool. Panics if the pool configuration fails.
+
+### `run_migration`
+```rust
+async fn run_migration(&self) -> Result<(), StorageEngineErrors>
+```
+Runs embedded SQL migrations against the database.
+
+### `acquire_connection`
+```rust
+async fn acquire_connection(&self) -> Result<PoolConnection<Postgres>, StorageEngineErrors>
+```
+Helper method to safely acquire a connection from the pool, wrapping pool errors into `StorageEngineErrors::UnableToAcquireConnection`.
+
+---
+
+## StorageEngine Trait Implementation
+
+### `load_storage`
+Initializes the `PostgresStorage` instance and runs pending database migrations. Panics if migrations fail.
+
+### `store_event`
+Inserts an event into the database.
+- **Table**: `events`
+- **Fields**: `id`, `content`, `timestamp` (converted to `DateTime<Utc>`), and `event_type`.
+
+### `get_events`
+Queries events within a specified timestamp range (`from_timestamp` to `to_timestamp`).
+- Reconstructs the events using the provided `factory_fn` closure.
+- Safely handles potential database nullability issues, returning `StorageEngineErrors::NoDataForField` if critical fields are missing.
+```
+
+---
+
+### File: `docs/event_aggregator.md`
 
 ```markdown
 # Event Aggregator
 
-The `event_aggregator` module is responsible for receiving, processing, and persisting system events. It coordinates event ingestion through the `EventAggregator` and handles event persistence via the `AgentRecorder`.
+The `EventAggregator` module manages the ingestion, routing, and recording of system and user-generated events.
 
-## Architecture
+## AgentRecorder
 
-- **`EventAggregator`**: The entry point for adding events. It processes incoming events and routes them to the appropriate storage or recorder.
-- **`AgentRecorder`**: Implements the `SharedLog` trait to append events to the underlying storage.
+The `AgentRecorder` is responsible for appending events to the active log stream. It can operate with or without an active storage backend.
 
----
+### Behavior with Storage
+When configured with a storage engine (`AgentRecorder::new_with_storage(engine)`), appending an event spawns an asynchronous task to persist the event to the database.
 
-## Logging and Diagnostics
+### Behavior without Storage
+When initialized without a storage engine (`AgentRecorder::new()`), the recorder gracefully skips the persistence step, allowing the system to run in an ephemeral, memory-only mode.
 
-The module utilizes structured logging via the `tracing` crate to provide rich, queryable diagnostic information. 
+## Testing & Verification
 
-### Key Logged Events
-
-#### 1. Event Appended (`AgentRecorder::append_event`)
-When an event is successfully appended to the log, an `INFO` level log is emitted with structured context:
-* **Fields**:
-  * `content`: The string representation of the event's content.
-  * `event_type`: The type classification of the event.
-  * `id`: The unique identifier of the event.
-* **Message**: `"appended event"`
-
-#### 2. Event Added (`EventAggregator::add_event`)
-When a new event is added to the aggregator, an `INFO` level log is emitted:
-* **Fields**:
-  * `agent_notes`: Notes associated with the agent processing the event.
-* **Message**: `"add_event called"`
-
-*Note: Standard `println!` debugging statements have been replaced with these structured `tracing::info!` macros to support production-grade observability.*
+The asynchronous behavior of the recorder is verified via integration tests:
+- `test_agent_recorder_append_event_no_storage`: Verifies that events can be appended without throwing errors when no storage engine is configured.
+- `test_agent_recorder_append_event_with_storage`: Verifies that events are successfully dispatched to the underlying storage engine when configured.
 ```
