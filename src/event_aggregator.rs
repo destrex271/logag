@@ -92,8 +92,23 @@ impl EventAggregator {
                 unix_epoch_timestamp,
                 event_type,
             ));
-        println!("{:?}", agent_notes);
+        tracing::info!("{:?}", agent_notes);
         tracing::info!(agent_notes = %agent_notes, "add_event called");
+        "success".to_string()
+    }
+
+    pub fn add_event_from_raw_stream(
+        &self,
+        content: String,
+        event_type: EventType,
+        unix_epoch_timestamp: String,
+    ) -> String {
+        self.shared_log
+            .append_event(self.event_factory.create_log_event(
+                content,
+                unix_epoch_timestamp,
+                event_type,
+            ));
         "success".to_string()
     }
 }

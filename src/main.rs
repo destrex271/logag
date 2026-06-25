@@ -5,6 +5,7 @@ use axum::routing::post;
 use clap::Parser;
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
+use logag::http_response_handler::HTTPResponseHandler;
 use logag::observability::Observability;
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
@@ -33,6 +34,8 @@ async fn main() -> anyhow::Result<()> {
 
     Observability::init();
 
+    let http_config = config.clone();
+
     let mcp_service = StreamableHttpService::new(
         move || Ok(EventAggregator::new(config.clone())), // Clone allocated the string again on
         // the heap. Since string points to a
@@ -42,9 +45,14 @@ async fn main() -> anyhow::Result<()> {
         StreamableHttpServerConfig::default(),
     );
 
+    let http_handler = std::sync::Arc::new(HTTPResponseHandler::new(EventAggregator::new(
+        http_config,
+    )));
+
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
-        .route("/record", post(handle_post_response));
+        .route("/record", post(HTTPResponseHandler::handle_post_response))
+        .with_state(http_handler);
     let tcp_listener = tokio::net::TcpListener::bind(MCP_BIND_ADDR).await?;
     tracing::info!("Started HTTP + MCP endpoints at {}", MCP_BIND_ADDR);
     let _ = axum::serve(tcp_listener, router).await;
@@ -53,7 +61,4 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_post_response(body: String) -> &'static str {
-    tracing::info!("Recieved the following data from Agent: {}", body);
-    "Ok"
-}
+
