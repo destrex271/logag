@@ -34,20 +34,16 @@ async fn main() -> anyhow::Result<()> {
 
     Observability::init();
 
-    let http_config = config.clone();
+    let aggregator = EventAggregator::new(config);
+    let mcp_aggregator = aggregator.clone();
 
     let mcp_service = StreamableHttpService::new(
-        move || Ok(EventAggregator::new(config.clone())), // Clone allocated the string again on
-        // the heap. Since string points to a
-        // value on heap, it cannot be copy, to
-        // avoid dangling pointers.
+        move || Ok(mcp_aggregator.clone()),
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
 
-    let http_handler = std::sync::Arc::new(HTTPResponseHandler::new(EventAggregator::new(
-        http_config,
-    )));
+    let http_handler = std::sync::Arc::new(HTTPResponseHandler::new(aggregator));
 
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
