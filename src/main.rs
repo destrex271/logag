@@ -53,8 +53,5 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Started HTTP + MCP endpoints at {}", MCP_BIND_ADDR);
     let _ = axum::serve(tcp_listener, router).await;
 
-
     Ok(())
 }
-
-

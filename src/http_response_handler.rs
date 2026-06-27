@@ -14,10 +14,7 @@ impl HTTPResponseHandler {
         Self { event_aggregator }
     }
 
-    pub async fn handle_post_response(
-        State(handler): State<Arc<Self>>,
-        body: String,
-    ) -> String {
+    pub async fn handle_post_response(State(handler): State<Arc<Self>>, body: String) -> String {
         handler.process_body(&body);
         "Ok".to_string()
     }
