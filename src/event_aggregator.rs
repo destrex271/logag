@@ -9,7 +9,7 @@ use tokio::sync::OnceCell;
 pub struct EventAggregator {
     event_factory: EventFactory,
     global_config: GlobalConfig,
-    shared_log: AgentRecorder,
+    shared_log: std::sync::Arc<AgentRecorder>,
 }
 
 struct AgentRecorder {
@@ -60,14 +60,18 @@ pub struct MCPEvent {
 
 impl Clone for EventAggregator {
     fn clone(&self) -> Self {
-        EventAggregator::new(self.global_config.clone())
+        EventAggregator {
+            event_factory: EventFactory::new(),
+            global_config: self.global_config.clone(),
+            shared_log: self.shared_log.clone(),
+        }
     }
 }
 
 #[tool_router(server_handler)]
 impl EventAggregator {
     pub fn new(global_config: GlobalConfig) -> Self {
-        let recorder = AgentRecorder::new();
+        let recorder = std::sync::Arc::new(AgentRecorder::new());
         recorder.initialize(global_config.clone());
         EventAggregator {
             event_factory: EventFactory::new(),
@@ -92,8 +96,23 @@ impl EventAggregator {
                 unix_epoch_timestamp,
                 event_type,
             ));
-        println!("{:?}", agent_notes);
+        tracing::info!("{:?}", agent_notes);
         tracing::info!(agent_notes = %agent_notes, "add_event called");
+        "success".to_string()
+    }
+
+    pub fn add_event_from_raw_stream(
+        &self,
+        content: String,
+        event_type: EventType,
+        unix_epoch_timestamp: String,
+    ) -> String {
+        self.shared_log
+            .append_event(self.event_factory.create_log_event(
+                content,
+                unix_epoch_timestamp,
+                event_type,
+            ));
         "success".to_string()
     }
 }
@@ -223,7 +242,7 @@ mod tests {
         let aggregator = EventAggregator {
             event_factory: factory,
             global_config,
-            shared_log: recorder,
+            shared_log: std::sync::Arc::new(recorder),
         };
 
         let mcp_event = MCPEvent {
