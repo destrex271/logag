@@ -1,22 +1,17 @@
 use crate::embeddings::traits::EmbeddingsService;
 use fastembed::TextEmbedding;
 
-
-pub struct FastEmbeddingService{
-    model: TextEmbedding
+pub struct FastEmbeddingService {
+    model: TextEmbedding,
 }
 
-
-impl EmbeddingsService for FastEmbeddingService{
-    fn generate_embeddings(
-        &mut self,
-        documents: Vec<String>,
-    ) -> Result<Vec<Vec<f32>>, String> {
-        match self.model.embed(documents, None){
+impl EmbeddingsService for FastEmbeddingService {
+    fn generate_embeddings(&mut self, documents: Vec<String>) -> Result<Vec<Vec<f32>>, String> {
+        match self.model.embed(documents, None) {
             Ok(content) => {
                 tracing::info!("Successfully generated embeddings {}", content.len());
                 Ok(content)
-            },
+            }
             Err(err) => {
                 let msg = format!("unable to initialize model: {:?}", err);
                 tracing::error!(msg);
@@ -26,14 +21,10 @@ impl EmbeddingsService for FastEmbeddingService{
     }
 }
 
-impl FastEmbeddingService{
+impl FastEmbeddingService {
     pub fn new() -> Result<FastEmbeddingService, String> {
-        match TextEmbedding::try_new(Default::default()){
-            Ok(model) => Ok( 
-                FastEmbeddingService{
-                    model: model,
-                }
-            ),
+        match TextEmbedding::try_new(Default::default()) {
+            Ok(model) => Ok(FastEmbeddingService { model: model }),
             Err(err) => {
                 let msg = format!("unable to initialize model: {:?}", err);
                 tracing::error!(msg);
@@ -90,10 +81,7 @@ mod tests {
     #[test]
     fn test_embeddings_have_consistent_dimensions() {
         let mut service = FastEmbeddingService::new().unwrap();
-        let result = service.generate_embeddings(vec![
-            "First".to_string(),
-            "Second".to_string(),
-        ]);
+        let result = service.generate_embeddings(vec!["First".to_string(), "Second".to_string()]);
         assert!(result.is_ok());
         let embeddings = result.unwrap();
         assert_eq!(embeddings.len(), 2);

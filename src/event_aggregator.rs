@@ -170,9 +170,8 @@ mod tests {
             let storage = std::sync::Arc::new(OnceCell::new());
             let _ = storage.set(engine);
             let model_cell = std::sync::Arc::new(OnceCell::new());
-            let _ = model_cell.set(
-                Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>
-            );
+            let _ = model_cell
+                .set(Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>);
             AgentRecorder {
                 storage,
                 embedding_model: model_cell,
