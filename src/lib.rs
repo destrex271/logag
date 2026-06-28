@@ -5,3 +5,4 @@ pub mod http_response_handler;
 pub mod observability;
 mod shared_log;
 mod storage;
+mod embeddings;

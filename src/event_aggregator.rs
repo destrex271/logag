@@ -1,3 +1,5 @@
+use crate::embeddings::fastembed::FastEmbeddingService;
+use crate::embeddings::traits::EmbeddingsService;
 use crate::global_config::GlobalConfig;
 use crate::shared_log::traits::{Event, EventFactory, EventType, SharedLog};
 use crate::storage::traits::{StorageBackendProvider, StorageEngine};
@@ -14,12 +16,18 @@ pub struct EventAggregator {
 
 struct AgentRecorder {
     storage: std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>,
+    embedding_model: std::sync::Arc<Box<dyn EmbeddingsService>>,
 }
 
 impl AgentRecorder {
     fn new() -> Self {
+        let mut embedding_model: std::sync::Arc<Box<dyn EmbeddingsService>> =
+            std::sync::Arc::new(
+                Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>
+            );
         AgentRecorder {
             storage: std::sync::Arc::new(OnceCell::new()),
+            embedding_model,
         }
     }
 
@@ -162,7 +170,14 @@ mod tests {
         fn new_with_storage(engine: Box<dyn StorageEngine>) -> Self {
             let cell = std::sync::Arc::new(OnceCell::new());
             let _ = cell.set(engine);
-            AgentRecorder { storage: cell }
+            let embedding_model: std::sync::Arc<Box<dyn EmbeddingsService>> =
+                std::sync::Arc::new(
+                    Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>
+                );
+            AgentRecorder {
+                storage: cell,
+                embedding_model,
+            }
         }
     }
 
