@@ -1,10 +1,4 @@
-CREATE TABLE IF NOT EXISTS LogEvent (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    content TEXT,
-    timestamp TIMESTAMP,
-    event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('user_input', 'agent_output'))
-);
-
+-- Add migration script here
 CREATE TABLE IF NOT EXISTS CachedAgentResponse (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     log_event_id UUID REFERENCES LogEvent(id),

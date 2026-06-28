@@ -16,7 +16,7 @@ pub struct EventAggregator {
 
 struct AgentRecorder {
     storage: std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>,
-    embedding_model: std::sync::Arc<OnceCell<Box<dyn EmbeddingsService>>>,
+    embedding_model: std::sync::Arc<OnceCell<std::sync::Mutex<Box<dyn EmbeddingsService>>>>,
 }
 
 impl AgentRecorder {
@@ -28,6 +28,7 @@ impl AgentRecorder {
     }
 
     fn initialize(&self, config: GlobalConfig) {
+        // TODO(destrex271): Find a better way to do this.
         let storage = self.storage.clone();
         tokio::spawn(async move {
             let engine = StorageBackendProvider::get_storage_backend(config).await;
@@ -35,7 +36,7 @@ impl AgentRecorder {
         });
 
         let model = FastEmbeddingService::new().unwrap();
-        let _ = self.embedding_model.set(Box::new(model));
+        let _ = self.embedding_model.set(std::sync::Mutex::new(Box::new(model)));
     }
 }
 
@@ -48,10 +49,33 @@ impl SharedLog for AgentRecorder {
             "appended event"
         );
 
+        // If user input -> Generate embeddings -> Perform similarity search -> Store -> TombStone
+        // older associated responses with that entry.
+
+        let event_id = event.get_id();
+        let event_type = event.get_event_type();
+        let content = event.get_content();
+
+        let embedding: Option<Vec<f32>> = match event_type {
+            EventType::UserInput => {
+                self.embedding_model.get().and_then(|model| {
+                    model.lock().ok().and_then(|mut m| {
+                        m.generate_embeddings(vec![content.clone()])
+                            .ok()
+                            .and_then(|v| v.into_iter().next())
+                    })
+                })
+            }
+            _ => None,
+        };
+
         let storage = self.storage.clone();
         tokio::spawn(async move {
             if let Some(engine) = storage.get() {
                 let _ = engine.store_event(event.as_ref()).await;
+                if let Some(ref emb) = embedding {
+                    let _ = engine.store_user_input_embedding(event_id, emb).await;
+                }
             }
         });
     }
@@ -149,6 +173,22 @@ mod tests {
             Ok(())
         }
 
+        async fn store_user_input_embedding(
+            &self,
+            _user_event_id: uuid::Uuid,
+            _embedding: &[f32],
+        ) -> Result<(), StorageEngineErrors> {
+            Ok(())
+        }
+
+        async fn store_cached_agent_response(
+            &self,
+            _log_event_id: uuid::Uuid,
+            _user_query_id: uuid::Uuid,
+        ) -> Result<(), StorageEngineErrors> {
+            Ok(())
+        }
+
         async fn get_events<T, F>(
             &self,
             _from_timestamp: isize,
@@ -170,8 +210,9 @@ mod tests {
             let storage = std::sync::Arc::new(OnceCell::new());
             let _ = storage.set(engine);
             let model_cell = std::sync::Arc::new(OnceCell::new());
-            let _ = model_cell
-                .set(Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>);
+            let _ = model_cell.set(std::sync::Mutex::new(
+                Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>,
+            ));
             AgentRecorder {
                 storage,
                 embedding_model: model_cell,
