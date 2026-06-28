@@ -10,6 +10,7 @@ axum = "0.8.9"
 chrono = "0.4.44"
 clap = "4.6.1"
 duckdb = "1.10502.0"
+fastembed = "5.17.2"
 log = "0.4.29"
 paris = { version = "1.5", features = ["timestamps"] }
 rmcp = { version = "1.7", features = ["server", "transport-streamable-http-server"] }
