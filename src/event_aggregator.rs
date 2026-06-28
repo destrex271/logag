@@ -16,18 +16,14 @@ pub struct EventAggregator {
 
 struct AgentRecorder {
     storage: std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>,
-    embedding_model: std::sync::Arc<Box<dyn EmbeddingsService>>,
+    embedding_model: std::sync::Arc<OnceCell<Box<dyn EmbeddingsService>>>,
 }
 
 impl AgentRecorder {
     fn new() -> Self {
-        let mut embedding_model: std::sync::Arc<Box<dyn EmbeddingsService>> =
-            std::sync::Arc::new(
-                Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>
-            );
         AgentRecorder {
             storage: std::sync::Arc::new(OnceCell::new()),
-            embedding_model,
+            embedding_model: std::sync::Arc::new(OnceCell::new()),
         }
     }
 
@@ -37,6 +33,9 @@ impl AgentRecorder {
             let engine = StorageBackendProvider::get_storage_backend(config).await;
             let _ = storage.set(engine);
         });
+
+        let model = FastEmbeddingService::new().unwrap();
+        let _ = self.embedding_model.set(Box::new(model));
     }
 }
 
@@ -168,15 +167,15 @@ mod tests {
     #[cfg(test)]
     impl AgentRecorder {
         fn new_with_storage(engine: Box<dyn StorageEngine>) -> Self {
-            let cell = std::sync::Arc::new(OnceCell::new());
-            let _ = cell.set(engine);
-            let embedding_model: std::sync::Arc<Box<dyn EmbeddingsService>> =
-                std::sync::Arc::new(
-                    Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>
-                );
+            let storage = std::sync::Arc::new(OnceCell::new());
+            let _ = storage.set(engine);
+            let model_cell = std::sync::Arc::new(OnceCell::new());
+            let _ = model_cell.set(
+                Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>
+            );
             AgentRecorder {
-                storage: cell,
-                embedding_model,
+                storage,
+                embedding_model: model_cell,
             }
         }
     }

@@ -42,3 +42,63 @@ impl FastEmbeddingService{
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_success() {
+        let service = FastEmbeddingService::new();
+        assert!(service.is_ok());
+    }
+
+    #[test]
+    fn test_generate_embeddings_single() {
+        let mut service = FastEmbeddingService::new().unwrap();
+        let result = service.generate_embeddings(vec!["Hello world".to_string()]);
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 1);
+        assert!(!embeddings[0].is_empty());
+    }
+
+    #[test]
+    fn test_generate_embeddings_empty_input() {
+        let mut service = FastEmbeddingService::new().unwrap();
+        let result = service.generate_embeddings(vec![]);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_generate_embeddings_multiple_documents() {
+        let mut service = FastEmbeddingService::new().unwrap();
+        let result = service.generate_embeddings(vec![
+            "First".to_string(),
+            "Second".to_string(),
+            "Third".to_string(),
+        ]);
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 3);
+        for (i, emb) in embeddings.iter().enumerate() {
+            assert!(!emb.is_empty(), "Embedding {} is empty", i);
+        }
+    }
+
+    #[test]
+    fn test_embeddings_have_consistent_dimensions() {
+        let mut service = FastEmbeddingService::new().unwrap();
+        let result = service.generate_embeddings(vec![
+            "First".to_string(),
+            "Second".to_string(),
+        ]);
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 2);
+        let dim = embeddings[0].len();
+        assert!(dim > 0);
+        assert_eq!(embeddings[1].len(), dim);
+    }
+}
