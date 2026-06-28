@@ -1,6 +1,6 @@
-Based on the code changes introduced in the past 24 hours, a new `embeddings` module has been added, and the `event_aggregator` has been updated to integrate this new service. 
+Based on the code changes introduced in the past 24 hours, a new `embeddings` module has been added to the codebase, and the `event_aggregator` has been updated to integrate this new service. 
 
-Here are the new and updated markdown documentation files mirroring the `src/` structure.
+Here are the new and updated documentation files mirroring the `src/` directory structure.
 
 ---
 
@@ -11,15 +11,23 @@ Here are the new and updated markdown documentation files mirroring the `src/` s
 
 The `embeddings` module provides a standardized interface and implementations for generating vector embeddings from text documents. These embeddings are typically used for downstream tasks such as semantic search, clustering, or retrieval-augmented generation (RAG).
 
-## Module Structure
+## Architecture
 
-The module is structured as follows:
-- **`traits.rs`**: Defines the core `EmbeddingsService` trait to decouple the application from specific embedding provider implementations.
-- **`fastembed.rs`**: A local, high-performance implementation of the embedding service using the `fastembed` library.
+The module is designed around a trait-based abstraction to allow easy swapping of embedding generation backends.
+
+```
+src/embeddings/
+├── mod.rs
+├── traits.rs         # Defines the core EmbeddingsService trait
+└── fastembed.rs      # FastEmbed-based implementation of the trait
+```
+
+- **`traits.rs`**: Defines the `EmbeddingsService` trait, establishing a common contract for generating embeddings.
+- **`fastembed.rs`**: Implements the `EmbeddingsService` using the `fastembed` library, which runs lightweight, state-of-the-art embedding models locally.
 
 ## Integration
 
-The embedding service is integrated into the system's event pipeline (e.g., within the `AgentRecorder` in `event_aggregator.rs`) to facilitate real-time embedding generation for incoming events or documents.
+The embedding service is integrated into the `AgentRecorder` within the `event_aggregator` module, allowing events or documents processed by the system to be automatically embedded and stored.
 ```
 
 ---
@@ -29,11 +37,11 @@ The embedding service is integrated into the system's event pipeline (e.g., with
 ```markdown
 # Embeddings Traits
 
-This module defines the shared interfaces for embedding generation services within the application.
+This document describes the core traits defined in `src/embeddings/traits.rs`.
 
 ## `EmbeddingsService`
 
-The `EmbeddingsService` trait must be implemented by any backend providing text embedding capabilities. It is designed to be thread-safe (`Send + Sync + 'static`) to allow sharing across asynchronous tasks.
+The `EmbeddingsService` trait defines the interface that any embedding provider must implement. It is designed to be thread-safe (`Send + Sync + 'static`) to support concurrent execution environments.
 
 ```rust
 pub trait EmbeddingsService: Send + Sync + 'static {
@@ -44,13 +52,14 @@ pub trait EmbeddingsService: Send + Sync + 'static {
 ### Methods
 
 #### `generate_embeddings`
-Generates vector embeddings for a list of input documents.
 
-* **Parameters**:
-  * `documents`: A `Vec<String>` containing the text segments to be embedded.
-* **Returns**:
-  * `Ok(Vec<Vec<f32>>)`: A vector of embeddings, where each embedding is represented as a vector of 32-bit floating-point numbers (`Vec<f32>`).
-  * `Err(String)`: An error message if the embedding generation fails.
+Generates vector embeddings for a batch of text documents.
+
+- **Parameters**:
+  - `documents`: A `Vec<String>` containing the text documents to embed.
+- **Returns**:
+  - `Ok(Vec<Vec<f32>>)`: A vector of embeddings, where each embedding is represented as a vector of 32-bit floating-point numbers (`Vec<f32>`).
+  - `Err(String)`: An error message if the embedding generation fails.
 ```
 
 ---
@@ -60,7 +69,7 @@ Generates vector embeddings for a list of input documents.
 ```markdown
 # FastEmbed Service
 
-The `FastEmbeddingService` is a concrete implementation of the `EmbeddingsService` trait. It utilizes the `fastembed` crate to generate text embeddings locally using highly optimized ONNX runtime models.
+The `FastEmbeddingService` is a concrete implementation of the [`EmbeddingsService`](traits.md) trait using the `fastembed` crate. It runs embedding models locally, providing high performance without requiring external API calls.
 
 ## Struct Definition
 
@@ -70,73 +79,67 @@ pub struct FastEmbeddingService {
 }
 ```
 
-## Implementations
+## Implementation
 
 ### Associated Functions
 
 #### `new`
-Initializes a new instance of `FastEmbeddingService` with default model settings.
 
 ```rust
 pub fn new() -> Result<FastEmbeddingService, String>
 ```
-* **Returns**: `Ok(FastEmbeddingService)` on successful model initialization, or an `Err(String)` containing the initialization error.
+Initializes a new instance of `FastEmbeddingService` using the default model configuration provided by `fastembed`.
+- Returns `Ok(FastEmbeddingService)` on success.
+- Logs an error and returns `Err(String)` if the model fails to initialize.
 
 ### Trait Implementations
 
 #### `EmbeddingsService` for `FastEmbeddingService`
 
-```rust
-impl EmbeddingsService for FastEmbeddingService {
-    fn generate_embeddings(
-        &mut self,
-        documents: Vec<String>,
-    ) -> Result<Vec<Vec<f32>>, String>;
-}
-```
-* **Behavior**: Calls the underlying `fastembed::TextEmbedding::embed` method. Logs success or failure using the `tracing` library.
+- **`generate_embeddings`**: Uses the underlying `TextEmbedding` model to generate embeddings for the provided documents. It logs the count of successfully generated embeddings or logs and returns an error if the operation fails.
 
-## Usage Example
+## Unit Tests
 
-```rust
-use crate::embeddings::fastembed::FastEmbeddingService;
-use crate::embeddings::traits::EmbeddingsService;
-
-let mut service = FastEmbeddingService::new().expect("Failed to initialize embedding model");
-let documents = vec!["Hello world".to_string(), "Rust programming".to_string()];
-
-if let Ok(embeddings) = service.generate_embeddings(documents) {
-    println!("Generated {} embeddings.", embeddings.len());
-}
-```
+The implementation includes comprehensive unit tests covering:
+- **Successful Initialization**: Verifies that `FastEmbeddingService::new()` succeeds under default configurations.
+- **Single Document Embedding**: Ensures a single document produces a valid, non-empty embedding vector.
+- **Empty Input Handling**: Verifies that passing an empty list of documents returns an empty list of embeddings without crashing.
+- **Multiple Document Embedding**: Validates batch processing of multiple documents.
+- **Consistent Dimensions**: Assures that all generated embeddings in a batch share the same vector dimensionality.
 ```
 
 ---
 
 ### Updated File: `docs/event_aggregator.md`
 
-*(Assuming this file exists, we append/update the section regarding `AgentRecorder` initialization)*
+*(Additions to the existing `docs/event_aggregator.md` file to document the integration of the embedding service)*
 
 ```markdown
 ...
 
-## Agent Recorder
+## AgentRecorder
 
-The `AgentRecorder` is an internal component of the `EventAggregator` responsible for managing the lifecycle of storage engines and embedding services.
+The `AgentRecorder` is an internal component of the `EventAggregator` responsible for managing the lifecycle of storage backends and embedding services.
 
 ### Fields
-* `storage`: An `Arc<OnceCell<Box<dyn StorageEngine>>>` holding the active storage backend.
-* `embedding_model`: An `Arc<OnceCell<Box<dyn EmbeddingsService>>>` holding the active embedding generation service.
+
+- `storage`: `std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>`  
+  A thread-safe, write-once cell holding the active storage engine.
+- `embedding_model`: `std::sync::Arc<OnceCell<Box<dyn EmbeddingsService>>>`  
+  A thread-safe, write-once cell holding the active embedding service.
 
 ### Initialization
-Upon calling `initialize(config)`, the `AgentRecorder`:
-1. Configures and sets the storage backend asynchronously.
-2. Instantiates and sets the `FastEmbeddingService` as the default `EmbeddingsService` for generating vector representations of incoming data.
+
+Upon calling `initialize(config)` on the `AgentRecorder`:
+1. The configured `StorageEngine` is retrieved via the `StorageBackendProvider` and set in the `storage` cell.
+2. A new `FastEmbeddingService` is instantiated and set in the `embedding_model` cell.
 
 ```rust
-struct AgentRecorder {
-    storage: std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>,
-    embedding_model: std::sync::Arc<OnceCell<Box<dyn EmbeddingsService>>>,
-}
+let model = FastEmbeddingService::new().unwrap();
+let _ = self.embedding_model.set(Box::new(model));
 ```
+
+### Testing Support
+
+For testing purposes, `AgentRecorder` provides a helper constructor `new_with_storage(engine: Box<dyn StorageEngine>)` which automatically initializes a default `FastEmbeddingService` alongside the provided mock or test storage engine.
 ```
