@@ -89,7 +89,10 @@ impl StorageEngine for PostgresStorage {
             event_type
         );
 
-        query.execute(&mut *connection).await.unwrap();
+        query
+            .execute(&mut *connection)
+            .await
+            .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }
@@ -129,14 +132,18 @@ impl StorageEngine for PostgresStorage {
     ) -> Result<(), StorageEngineErrors> {
         let mut connection = self.acquire_connection().await?;
 
-        sqlx::query(
-            "INSERT INTO CachedAgentResponse (log_event_id, user_query_id) VALUES ($1, $2)",
-        )
-        .bind(log_event_id)
-        .bind(user_query_id)
-        .execute(&mut *connection)
-        .await
-        .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+        let query = sqlx::query!(
+            r#"
+            INSERT INTO CachedAgentResponse (log_event_id, user_query_id)
+            VALUES ($1, $2)
+            "#,
+            log_event_id,
+            user_query_id,
+        );
+
+        query
+            .execute(&mut *connection)
+            .await.map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }

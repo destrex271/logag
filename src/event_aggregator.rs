@@ -41,43 +41,71 @@ impl AgentRecorder {
 }
 
 impl SharedLog for AgentRecorder {
-    fn append_event(&self, event: Box<dyn Event>) {
+    fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid {
+        let id: uuid::Uuid = event.get_id();
+
         tracing::info!(
             content = %event.get_content(),
             event_type = %event.get_event_type(),
             id = %event.get_id(),
-            "appended event"
+            "appended standalone event to log"
         );
 
-        // If user input -> Generate embeddings -> Perform similarity search -> Store -> TombStone
-        // older associated responses with that entry.
-
-        let event_id = event.get_id();
-        let event_type = event.get_event_type();
-        let content = event.get_content();
-
-        let embedding: Option<Vec<f32>> = match event_type {
-            EventType::UserInput => {
-                self.embedding_model.get().and_then(|model| {
-                    model.lock().ok().and_then(|mut m| {
-                        m.generate_embeddings(vec![content.clone()])
-                            .ok()
-                            .and_then(|v| v.into_iter().next())
-                    })
-                })
-            }
-            _ => None,
-        };
-
         let storage = self.storage.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Some(engine) = storage.get() {
                 let _ = engine.store_event(event.as_ref()).await;
-                if let Some(ref emb) = embedding {
-                    let _ = engine.store_user_input_embedding(event_id, emb).await;
-                }
             }
         });
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(handle).unwrap();
+        });
+
+        tracing::info!("appeneded event");
+        return id
+    }
+
+    fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>) {
+        let user_content = user_input.get_content().clone();
+        let user_event_id = self.append_event(user_input);
+        let agent_event_id = self.append_event(agent_output);
+
+        // Generate Embeddings for user.
+        tracing::info_span!("generating_embeddings");
+        let mut embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(
+            |model| {
+                model.lock().ok().and_then(
+                    |mut m| {
+                        m.generate_embeddings(
+                            vec![user_content]
+                        )
+                            .ok()
+                            .and_then(|v| v.into_iter().next())
+                    }
+                )
+            }
+        );
+        tracing::info_span!("generated embeddings");
+
+        let storage = self.storage.clone();
+        tokio::spawn(async move{
+            tracing::info!("inserting user embeddings for event id: {}", user_event_id);
+            // Store embeddings.
+            if let Some(embed) = embeddings{
+                if let Some(engine) = storage.get(){
+                    let _ = engine.store_user_input_embedding(user_event_id, &embed).await;
+                }
+            }
+            tracing::info!("inserted user embeddings for event id: {}", user_event_id);
+
+            // Store agent response.
+            tracing::info!("inserting agent output cache for event id: {} for user query {}", agent_event_id, user_event_id);
+            if let Some(engine) = storage.get() {
+                let  _ = engine.store_cached_agent_response(agent_event_id, user_event_id).await;
+            }
+            tracing::info!("inserted agent output.")
+        });
+
     }
 }
 
@@ -132,18 +160,24 @@ impl EventAggregator {
         "success".to_string()
     }
 
-    pub fn add_event_from_raw_stream(
+    pub fn add_event_pair_from_raw_stream(
         &self,
-        content: String,
-        event_type: EventType,
+        user_content: String,
+        agent_content: String,
         unix_epoch_timestamp: String,
     ) -> String {
-        self.shared_log
-            .append_event(self.event_factory.create_log_event(
-                content,
+        self.shared_log.append_event_pair(
+            self.event_factory.create_log_event(
+                user_content,
+                unix_epoch_timestamp.clone(),
+                EventType::UserInput,
+            ),
+            self.event_factory.create_log_event(
+                agent_content,
                 unix_epoch_timestamp,
-                event_type,
-            ));
+                EventType::AgentOutput,
+            ),
+        );
         "success".to_string()
     }
 }

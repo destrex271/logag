@@ -1,4 +1,5 @@
--- Add migration script here
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS CachedAgentResponse (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     log_event_id UUID REFERENCES LogEvent(id),

@@ -19,7 +19,8 @@ impl std::fmt::Display for EventType {
 }
 
 pub trait SharedLog {
-    fn append_event(&self, event: Box<dyn Event>);
+    fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid;
+    fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
 }
 
 #[async_trait::async_trait]
