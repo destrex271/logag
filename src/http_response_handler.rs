@@ -50,7 +50,7 @@ mod tests {
         HTTPResponseHandler::new(EventAggregator::new(config))
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_body_with_valid_json() {
         let handler = test_handler();
         let body = r#"{"userInput":"hello","agentOutput":"world"}"#;
@@ -72,7 +72,7 @@ mod tests {
         handler.process_body(body);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_post_response_returns_ok() {
         let handler = Arc::new(test_handler());
         let router = axum::Router::new()

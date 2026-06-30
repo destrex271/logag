@@ -260,7 +260,7 @@ mod tests {
         assert!(recorder.storage.get().is_none());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_agent_recorder_append_event_no_storage() {
         let recorder = AgentRecorder::new();
         let event = EventFactory::new().create_log_event(
@@ -273,7 +273,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_agent_recorder_append_event_with_storage() {
         let store_count = std::sync::Arc::new(AtomicUsize::new(0));
         let engine = Box::new(MockStorageEngine {
@@ -293,7 +293,7 @@ mod tests {
         assert_eq!(store_count.load(Ordering::SeqCst), 1);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_agent_recorder_append_event_multiple() {
         let store_count = std::sync::Arc::new(AtomicUsize::new(0));
         let engine = Box::new(MockStorageEngine {
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(store_count.load(Ordering::SeqCst), 5);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_event_aggregator_add_event_with_storage() {
         let store_count = std::sync::Arc::new(AtomicUsize::new(0));
         let engine = Box::new(MockStorageEngine {
