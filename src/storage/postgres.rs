@@ -89,7 +89,61 @@ impl StorageEngine for PostgresStorage {
             event_type
         );
 
-        query.execute(&mut *connection).await.unwrap();
+        query
+            .execute(&mut *connection)
+            .await
+            .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+
+        Ok(())
+    }
+
+    async fn store_user_input_embedding(
+        &self,
+        user_event_id: uuid::Uuid,
+        embedding: &[f32],
+    ) -> Result<(), StorageEngineErrors> {
+        let mut connection = self.acquire_connection().await?;
+
+        let embedding_str: String = format!(
+            "[{}]",
+            embedding
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
+        sqlx::query(
+            "INSERT INTO UserInputEmbedding (user_event_id, embedding) VALUES ($1, $2::vector)",
+        )
+        .bind(user_event_id)
+        .bind(&embedding_str)
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+
+        Ok(())
+    }
+
+    async fn store_cached_agent_response(
+        &self,
+        log_event_id: uuid::Uuid,
+        user_query_id: uuid::Uuid,
+    ) -> Result<(), StorageEngineErrors> {
+        let mut connection = self.acquire_connection().await?;
+
+        let query = sqlx::query!(
+            r#"
+            INSERT INTO CachedAgentResponse (log_event_id, user_query_id)
+            VALUES ($1, $2)
+            "#,
+            log_event_id,
+            user_query_id,
+        );
+
+        query
+            .execute(&mut *connection)
+            .await.map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }

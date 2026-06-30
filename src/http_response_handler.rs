@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use crate::event_aggregator::EventAggregator;
 use crate::harnesses::HarnessResponse;
-use crate::shared_log::traits::EventType;
 
 pub struct HTTPResponseHandler {
     event_aggregator: EventAggregator,
@@ -27,15 +26,9 @@ impl HTTPResponseHandler {
 
         let timestamp = chrono::Utc::now().timestamp().to_string();
 
-        self.event_aggregator.add_event_from_raw_stream(
+        self.event_aggregator.add_event_pair_from_raw_stream(
             harness_data.userInput,
-            EventType::UserInput,
-            timestamp.clone(),
-        );
-
-        self.event_aggregator.add_event_from_raw_stream(
             harness_data.agentOutput,
-            EventType::AgentOutput,
             timestamp,
         );
     }
@@ -57,7 +50,7 @@ mod tests {
         HTTPResponseHandler::new(EventAggregator::new(config))
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_body_with_valid_json() {
         let handler = test_handler();
         let body = r#"{"userInput":"hello","agentOutput":"world"}"#;
@@ -79,7 +72,7 @@ mod tests {
         handler.process_body(body);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_post_response_returns_ok() {
         let handler = Arc::new(test_handler());
         let router = axum::Router::new()

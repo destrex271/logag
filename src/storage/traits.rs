@@ -74,6 +74,16 @@ pub trait StorageEngine: Send + Sync + 'static {
     where
         Self: Sized;
     async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
+    async fn store_user_input_embedding(
+        &self,
+        user_event_id: uuid::Uuid,
+        embedding: &[f32],
+    ) -> Result<(), StorageEngineErrors>;
+    async fn store_cached_agent_response(
+        &self,
+        log_event_id: uuid::Uuid,
+        user_query_id: uuid::Uuid,
+    ) -> Result<(), StorageEngineErrors>;
     async fn get_events<T, F>(
         &self,
         from_timestamp: isize,

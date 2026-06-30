@@ -25,7 +25,7 @@ tokio-util = "0.7.18"
 toml = "1.1.2"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-uuid = { version = "1.11", features = ["v4", "v7", "fast-rng"] }
+uuid = { version = "1.11", features = ["v4", "v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

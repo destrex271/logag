@@ -16,7 +16,7 @@ pub struct EventAggregator {
 
 struct AgentRecorder {
     storage: std::sync::Arc<OnceCell<Box<dyn StorageEngine>>>,
-    embedding_model: std::sync::Arc<OnceCell<Box<dyn EmbeddingsService>>>,
+    embedding_model: std::sync::Arc<OnceCell<std::sync::Mutex<Box<dyn EmbeddingsService>>>>,
 }
 
 impl AgentRecorder {
@@ -28,6 +28,7 @@ impl AgentRecorder {
     }
 
     fn initialize(&self, config: GlobalConfig) {
+        // TODO(destrex271): Find a better way to do this.
         let storage = self.storage.clone();
         tokio::spawn(async move {
             let engine = StorageBackendProvider::get_storage_backend(config).await;
@@ -35,25 +36,76 @@ impl AgentRecorder {
         });
 
         let model = FastEmbeddingService::new().unwrap();
-        let _ = self.embedding_model.set(Box::new(model));
+        let _ = self.embedding_model.set(std::sync::Mutex::new(Box::new(model)));
     }
 }
 
 impl SharedLog for AgentRecorder {
-    fn append_event(&self, event: Box<dyn Event>) {
+    fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid {
+        let id: uuid::Uuid = event.get_id();
+
         tracing::info!(
             content = %event.get_content(),
             event_type = %event.get_event_type(),
             id = %event.get_id(),
-            "appended event"
+            "appended standalone event to log"
         );
 
         let storage = self.storage.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Some(engine) = storage.get() {
                 let _ = engine.store_event(event.as_ref()).await;
             }
         });
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(handle).unwrap();
+        });
+
+        tracing::info!("appeneded event");
+        return id
+    }
+
+    fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>) {
+        let user_content = user_input.get_content().clone();
+        let user_event_id = self.append_event(user_input);
+        let agent_event_id = self.append_event(agent_output);
+
+        // Generate Embeddings for user.
+        tracing::info_span!("generating_embeddings");
+        let mut embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(
+            |model| {
+                model.lock().ok().and_then(
+                    |mut m| {
+                        m.generate_embeddings(
+                            vec![user_content]
+                        )
+                            .ok()
+                            .and_then(|v| v.into_iter().next())
+                    }
+                )
+            }
+        );
+        tracing::info_span!("generated embeddings");
+
+        let storage = self.storage.clone();
+        tokio::spawn(async move{
+            tracing::info!("inserting user embeddings for event id: {}", user_event_id);
+            // Store embeddings.
+            if let Some(embed) = embeddings{
+                if let Some(engine) = storage.get(){
+                    let _ = engine.store_user_input_embedding(user_event_id, &embed).await;
+                }
+            }
+            tracing::info!("inserted user embeddings for event id: {}", user_event_id);
+
+            // Store agent response.
+            tracing::info!("inserting agent output cache for event id: {} for user query {}", agent_event_id, user_event_id);
+            if let Some(engine) = storage.get() {
+                let  _ = engine.store_cached_agent_response(agent_event_id, user_event_id).await;
+            }
+            tracing::info!("inserted agent output.")
+        });
+
     }
 }
 
@@ -108,18 +160,24 @@ impl EventAggregator {
         "success".to_string()
     }
 
-    pub fn add_event_from_raw_stream(
+    pub fn add_event_pair_from_raw_stream(
         &self,
-        content: String,
-        event_type: EventType,
+        user_content: String,
+        agent_content: String,
         unix_epoch_timestamp: String,
     ) -> String {
-        self.shared_log
-            .append_event(self.event_factory.create_log_event(
-                content,
+        self.shared_log.append_event_pair(
+            self.event_factory.create_log_event(
+                user_content,
+                unix_epoch_timestamp.clone(),
+                EventType::UserInput,
+            ),
+            self.event_factory.create_log_event(
+                agent_content,
                 unix_epoch_timestamp,
-                event_type,
-            ));
+                EventType::AgentOutput,
+            ),
+        );
         "success".to_string()
     }
 }
@@ -149,6 +207,22 @@ mod tests {
             Ok(())
         }
 
+        async fn store_user_input_embedding(
+            &self,
+            _user_event_id: uuid::Uuid,
+            _embedding: &[f32],
+        ) -> Result<(), StorageEngineErrors> {
+            Ok(())
+        }
+
+        async fn store_cached_agent_response(
+            &self,
+            _log_event_id: uuid::Uuid,
+            _user_query_id: uuid::Uuid,
+        ) -> Result<(), StorageEngineErrors> {
+            Ok(())
+        }
+
         async fn get_events<T, F>(
             &self,
             _from_timestamp: isize,
@@ -170,8 +244,9 @@ mod tests {
             let storage = std::sync::Arc::new(OnceCell::new());
             let _ = storage.set(engine);
             let model_cell = std::sync::Arc::new(OnceCell::new());
-            let _ = model_cell
-                .set(Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>);
+            let _ = model_cell.set(std::sync::Mutex::new(
+                Box::new(FastEmbeddingService::new().unwrap()) as Box<dyn EmbeddingsService>,
+            ));
             AgentRecorder {
                 storage,
                 embedding_model: model_cell,
@@ -185,7 +260,7 @@ mod tests {
         assert!(recorder.storage.get().is_none());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_agent_recorder_append_event_no_storage() {
         let recorder = AgentRecorder::new();
         let event = EventFactory::new().create_log_event(
@@ -198,7 +273,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_agent_recorder_append_event_with_storage() {
         let store_count = std::sync::Arc::new(AtomicUsize::new(0));
         let engine = Box::new(MockStorageEngine {
@@ -218,7 +293,7 @@ mod tests {
         assert_eq!(store_count.load(Ordering::SeqCst), 1);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_agent_recorder_append_event_multiple() {
         let store_count = std::sync::Arc::new(AtomicUsize::new(0));
         let engine = Box::new(MockStorageEngine {
@@ -239,7 +314,7 @@ mod tests {
         assert_eq!(store_count.load(Ordering::SeqCst), 5);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_event_aggregator_add_event_with_storage() {
         let store_count = std::sync::Arc::new(AtomicUsize::new(0));
         let engine = Box::new(MockStorageEngine {

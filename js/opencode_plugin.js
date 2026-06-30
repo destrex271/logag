@@ -44,10 +44,14 @@ export default (async () => {
 }) satisfies Plugin;
 
 function sendPair(sessionID: string, userInput: string, agentOutput: string) {
+  const cleanAgentOutput = agentOutput.startsWith(userInput)
+    ? agentOutput.slice(userInput.length)
+    : agentOutput;
+
   fetch("http://localhost:8000/record", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: sessionID, userInput, agentOutput }),
+    body: JSON.stringify({ sessionId: sessionID, userInput, agentOutput: cleanAgentOutput }),
   }).catch((err) => {
     console.error("Translation Server Offline:", err.message);
   });
