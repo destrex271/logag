@@ -273,5 +273,56 @@ impl StorageEngine for PostgresStorage {
 }
 
 
-// @opencode Add integration tests here
-mod test{}
+// @opencode Add integration tests here. Avoid bloat, keep them minimal and use
+// parameterization as much as possible.
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::global_config::GlobalConfig;
+    use crate::shared_log::log::{LogEvent, LogContent};
+    use crate::shared_log::traits::{Event, EventType};
+
+    // Helper function to create a test database connection string
+    fn get_test_connection_string() -> String {
+        "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string()
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_new() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string);
+        assert!(!storage.connection_string.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_store_and_retrieve_event() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        let timestamp = "1000000".to_string();
+        let event = LogEvent::new(EventType::UserInput, "test event content".to_string(), timestamp.clone());
+
+        storage.store_event(&event).await.unwrap();
+
+        let events: Vec<LogEvent> = storage
+            .get_events::<LogEvent, _>(
+                1000000,
+                2000000,
+                |id: uuid::Uuid, content: String, timestamp: isize, event_type: String| {
+                    let event_type_enum = match event_type.as_str() {
+                        "user_input" => EventType::UserInput,
+                        "agent_output" => EventType::AgentOutput,
+                        _ => panic!("Unknown event type"),
+                    };
+                    LogEvent::new(event_type_enum, content, timestamp.to_string())
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].get_content(), "test event content");
+    }
+}

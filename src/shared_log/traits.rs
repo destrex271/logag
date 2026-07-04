@@ -2,6 +2,7 @@ use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 
 use crate::shared_log::log::LogEvent;
+use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 pub enum EventType {
@@ -21,7 +22,7 @@ impl std::fmt::Display for EventType {
 pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid;
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
-    // fn find_similar_user_event(&self, user_input: Box<dyn Event>) -> ;
+    fn find_similar_user_event(&self, user_input: Box<dyn Event>) -> SlimUserEmbeddingInput;
 }
 
 #[async_trait::async_trait]
