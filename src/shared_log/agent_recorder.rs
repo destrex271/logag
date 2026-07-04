@@ -1,8 +1,11 @@
 use crate::embeddings::fastembed::FastEmbeddingService;
 use crate::embeddings::traits::EmbeddingsService;
-use crate::storage::traits::{StorageBackendProvider, StorageEngine};
+use crate::shared_log::errors::SharedLogErrors;
+use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
+use crate::storage::traits::{StorageBackendProvider, StorageEngine, StorageEngineErrors};
 use crate::shared_log::traits::{Event, SharedLog};
 use crate::global_config::GlobalConfig;
+use tokio::runtime::Handle;
 use tokio::sync::OnceCell;
 
 pub struct AgentRecorder {
@@ -97,6 +100,49 @@ impl SharedLog for AgentRecorder {
             tracing::info!("inserted agent output.")
         });
 
+    }
+
+    fn find_similar_user_event(
+        &self,
+        user_input: Box<dyn Event>
+    ) -> Result<SlimUserEmbeddingInput, SharedLogErrors>{
+
+        // Generate embedding.
+        let user_content: String = user_input.get_content();
+        let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(
+            |model| {
+                model.lock().ok().and_then(
+                    |mut m| {
+                        m.generate_embeddings(
+                            vec![user_content.clone()]
+                        )
+                            .ok()
+                            .and_then(|v| v.into_iter().next())
+                    }
+                )
+            }
+        );
+
+        let mut embeddings_data: Vec<f32> = vec![];
+        match embeddings{
+            Some(data) => {
+                embeddings_data = data;
+            },
+            None => return Err(SharedLogErrors::UnableToGenerateEmbeddings(
+                format!("Unable to generate vector embeddings for {}", user_content.clone())
+            ))
+        };
+
+        let storage = self.storage.clone();
+        let engine = storage.get().unwrap();
+        let handle = Handle::current();
+        let result: Result<SlimUserEmbeddingInput, StorageEngineErrors> 
+            = handle.block_on(engine.get_similar_user_input_embedding(embeddings_data));
+
+        match result{
+            Ok(response) => Ok(response),
+            Err(err) => Err(SharedLogErrors::UnexpectedStorageLevelError(err))
+        }
     }
 }
 
@@ -238,3 +284,6 @@ mod tests {
         assert_eq!(store_count.load(Ordering::SeqCst), 5);
     }
 }
+
+
+// @opencode add test for the new find similar user input function.
