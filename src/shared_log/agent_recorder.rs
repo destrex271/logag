@@ -285,5 +285,21 @@ mod tests {
     }
 }
 
+    #[tokio::test]
+    async fn test_agent_recorder_find_similar_user_event() {
+        let store_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = Box::new(MockStorageEngine {
+            store_count: store_count.clone(),
+        });
+        let recorder = AgentRecorder::new_with_storage(engine);
 
-// @opencode add test for the new find similar user input function.
+        let user_event = EventFactory::new().create_log_event(
+            "hello world".to_string(),
+            "1000000".to_string(),
+            EventType::UserInput,
+        );
+
+        let similar_event = recorder.find_similar_user_event(user_event.clone()).unwrap();
+        assert_eq!(similar_event.user_event_id, uuid::uuid!("00000000-0000-0000-0000-000000000000"));
+    }
+}
