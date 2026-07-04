@@ -3,8 +3,9 @@ use crate::storage::traits::{StorageEngine, StorageEngineErrors};
 use chrono::{DateTime, Utc};
 use log::LevelFilter;
 use sqlx::migrate::Migrator;
-use sqlx::{Pool, Postgres, pool::PoolConnection, postgres::PgPoolOptions};
+use sqlx::{Pool, Postgres, Row, pool::PoolConnection, postgres::PgPoolOptions};
 use uuid::Uuid;
+use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 
 const MAX_CONNECTIONS: u8 = 5;
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -208,4 +209,69 @@ impl StorageEngine for PostgresStorage {
 
         Ok(events)
     }
+
+    async fn get_similar_user_input_embedding(
+        &self,
+        embedding: Vec<f32>,
+    ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors> {
+
+        let embedding_as_vec: String = format!(
+            "[{}]",
+            embedding
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let query = sqlx::query(
+            r#"
+            WITH closest_matches AS (
+                SELECT id, user_event_id FROM UserInputEmbedding ORDER BY embedding <=> $1::vector DESC LIMIT 1
+            )
+            SELECT * FROM closest_matches ORDER BY id DESC;
+            "#,
+        )
+        .bind(&embedding_as_vec);
+
+        let mut connection = self.acquire_connection().await?;
+        let rows = query
+            .fetch_all(&mut *connection)
+            .await
+            .map_err(|error| return StorageEngineErrors::DatabaseError(Box::new(error)))?;
+
+        let mut input_reference: Vec<SlimUserEmbeddingInput> = rows.iter()
+            .map(|row| {
+                let id: uuid::Uuid = row.try_get("id")
+                    .map_err(|_| StorageEngineErrors::NoDataForField(format!(
+                        "primary id not found"
+                    )))?;
+
+                let user_event_id: uuid::Uuid = row.try_get("user_event_id")
+                    .map_err(|_| StorageEngineErrors::NoDataForField(format!(
+                        "no user event id reference found"
+                    )))?;
+
+                Ok(SlimUserEmbeddingInput{
+                    id: id,
+                    user_event_id: user_event_id,
+                })
+            })
+            .collect::<Result<Vec<SlimUserEmbeddingInput>, StorageEngineErrors>>()?
+            .into_iter()
+            .collect();
+
+        match input_reference.pop() {
+            Some(result) => Ok(result),
+            None => Err(
+                StorageEngineErrors::NoDataForField(
+                    String::from("No similar user embeddings found.")
+                )
+            )
+        }
+    }
 }
+
+
+// @opencode Add integration tests here
+mod test{}

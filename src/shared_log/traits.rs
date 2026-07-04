@@ -21,6 +21,7 @@ impl std::fmt::Display for EventType {
 pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid;
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
+    // fn find_similar_user_event(&self, user_input: Box<dyn Event>) -> ;
 }
 
 #[async_trait::async_trait]
@@ -29,6 +30,10 @@ pub trait Event: Send + Sync {
     fn get_content(&self) -> String;
     fn get_id(&self) -> uuid::Uuid; // Only use uuid v7.
     fn get_timestamp(&self) -> isize;
+}
+
+pub trait EventReference: Send + Sync {
+    fn get_source_id(&self) -> uuid::Uuid;
 }
 
 #[derive(Clone)]

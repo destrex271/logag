@@ -4,5 +4,6 @@ pub mod global_config;
 pub(crate) mod harnesses;
 pub mod http_response_handler;
 pub mod observability;
+pub mod retrieval_engine;
 mod shared_log;
 mod storage;
