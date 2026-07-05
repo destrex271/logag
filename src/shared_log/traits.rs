@@ -2,8 +2,8 @@ use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 
 use crate::shared_log::errors::SharedLogErrors;
-use crate::shared_log::log::LogEvent;
-use crate::shared_log::user_embedding_model::{CachedAgentResponse, SlimUserEmbeddingInput};
+use crate::shared_log::log::{LogContent, LogEvent};
+use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 pub enum EventType {
@@ -27,7 +27,10 @@ pub trait SharedLog {
         &self,
         user_input: Box<dyn Event>,
     ) -> Result<SlimUserEmbeddingInput, SharedLogErrors>;
-    // fn fetch_ai_response_for_user_event(&self, user_input_id: uuid::Uuid) -> Result<CachedAgentResponse, SharedLogErrors>;
+    fn fetch_ai_response_for_user_event(
+        &self,
+        user_input_id: uuid::Uuid,
+    ) -> Result<LogContent, SharedLogErrors>;
 }
 
 #[async_trait::async_trait]

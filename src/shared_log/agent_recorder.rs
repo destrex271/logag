@@ -145,19 +145,24 @@ impl SharedLog for AgentRecorder {
         }
     }
 
-    //
-    // fn fetch_ai_response_for_user_event(
-    //     &self,
-    //     user_input_id: uuid::Uuid
-    // ) -> Result<LogContent, SharedLogErrors> {
-    //
-    //     let storage = self.storage.clone();
-    //     let engine = storage.get().unwrap();
-    //     let handle = Handle::current();
-    //     let result: Result<SlimUserEmbeddingInput, StorageEngineErrors>
-    //         = handle.block_on(engine.get_agent_output_for_user_input(user_input_id));
-    //     Err(SharedLogErrors::UnknownError)
-    // }
+    fn fetch_ai_response_for_user_event(
+        &self,
+        user_input_id: uuid::Uuid,
+    ) -> Result<LogContent, SharedLogErrors> {
+        let storage = self.storage.clone();
+        let engine = storage.get().unwrap();
+        let handle = Handle::current();
+        let result: Result<LogContent, StorageEngineErrors> =
+            handle.block_on(engine.get_agent_output_for_user_input(user_input_id));
+
+        match result {
+            Ok(response) => Ok(response),
+            Err(err) => Err(SharedLogErrors::NoMatchingEntry(format!(
+                "No agent response found: {}",
+                err
+            ))),
+        }
+    }
 }
 
 #[cfg(test)]
