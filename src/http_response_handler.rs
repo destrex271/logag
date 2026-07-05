@@ -38,8 +38,8 @@ impl HTTPResponseHandler {
 mod tests {
     use super::*;
     use crate::event_aggregator::EventAggregator;
-    use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
     use crate::shared_log::agent_recorder::AgentRecorder;
+    use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
     use axum::routing::post;
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
