@@ -41,10 +41,6 @@ pub trait Event: Send + Sync {
     fn get_timestamp(&self) -> isize;
 }
 
-pub trait EventReference: Send + Sync {
-    fn get_source_id(&self) -> uuid::Uuid;
-}
-
 #[derive(Clone)]
 pub struct EventFactory;
 

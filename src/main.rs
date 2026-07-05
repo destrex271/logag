@@ -1,6 +1,3 @@
-use std::net::SocketAddr;
-
-use anyhow;
 use axum::routing::post;
 use clap::Parser;
 use logag::event_aggregator::EventAggregator;
@@ -11,7 +8,6 @@ use logag::retrieval_engine::RetrievalEngine;
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use tokio;
 
 const MCP_BIND_ADDR: &str = "127.0.0.1:8000";
 

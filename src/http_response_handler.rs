@@ -27,8 +27,8 @@ impl HTTPResponseHandler {
         let timestamp = chrono::Utc::now().timestamp().to_string();
 
         self.event_aggregator.add_event_pair_from_raw_stream(
-            harness_data.userInput,
-            harness_data.agentOutput,
+            harness_data.user_input,
+            harness_data.agent_output,
             timestamp,
         );
     }

@@ -86,16 +86,6 @@ pub trait StorageEngine: Send + Sync + 'static {
         log_event_id: uuid::Uuid,
         user_query_id: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors>;
-    async fn get_events<T, F>(
-        &self,
-        from_timestamp: isize,
-        to_timestamp: isize,
-        factory_fn: F,
-    ) -> Result<Vec<T>, StorageEngineErrors>
-    where
-        T: Event,
-        F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
-        Self: Sized;
     async fn get_similar_user_input_embedding(
         &self,
         embedding: Vec<f32>,

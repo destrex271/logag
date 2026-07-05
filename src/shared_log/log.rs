@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::shared_log::traits::{Event, EventReference, EventType};
+use crate::shared_log::traits::{Event, EventType};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use uuid::Timestamp;

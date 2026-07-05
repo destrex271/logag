@@ -16,7 +16,7 @@ impl GlobalConfig {
     pub fn load_config(file_path: String) -> GlobalConfig {
         let path = Path::new(file_path.as_str());
         let display = path.display();
-        let content: String = match File::open(&path) {
+        let content: String = match File::open(path) {
             Err(err) => panic!("unable to open file {}: {}", display, err),
             Ok(mut file) => {
                 let mut s = String::new();

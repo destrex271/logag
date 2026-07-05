@@ -59,10 +59,12 @@ impl SharedLog for AgentRecorder {
         });
 
         tracing::info!("appeneded event");
-        return id;
+        id
     }
 
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>) {
+        // TODO(update method to return errors).
+
         let user_content = user_input.get_content().clone();
         let user_event_id = self.append_event(user_input);
         let agent_event_id = self.append_event(agent_output);
@@ -82,13 +84,15 @@ impl SharedLog for AgentRecorder {
         tokio::spawn(async move {
             tracing::info!("inserting user embeddings for event id: {}", user_event_id);
             // Store embeddings.
-            if let Some(embed) = embeddings {
-                if let Some(engine) = storage.get() {
-                    let _ = engine
-                        .store_user_input_embedding(user_event_id, &embed)
-                        .await;
-                }
+            if let Some(engine) = storage.get() {
+                let _ = engine
+                    .store_user_input_embedding(user_event_id, &embeddings.unwrap())
+                    .await;
+            } else {
+                tracing::error!("unable to use storage engine.");
+                return;
             }
+
             tracing::info!("inserted user embeddings for event id: {}", user_event_id);
 
             // Store agent response.

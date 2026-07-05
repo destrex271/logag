@@ -24,7 +24,7 @@ impl EmbeddingsService for FastEmbeddingService {
 impl FastEmbeddingService {
     pub fn new() -> Result<FastEmbeddingService, String> {
         match TextEmbedding::try_new(Default::default()) {
-            Ok(model) => Ok(FastEmbeddingService { model: model }),
+            Ok(model) => Ok(FastEmbeddingService { model }),
             Err(err) => {
                 let msg = format!("unable to initialize model: {:?}", err);
                 tracing::error!(msg);

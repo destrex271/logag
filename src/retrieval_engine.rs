@@ -40,19 +40,20 @@ impl RetrievalEngine {
         &self,
         Parameters(ReadQuery { content }): Parameters<ReadQuery>,
     ) -> String {
-        let user_event_ref: SlimUserEmbeddingInput;
         let formatted_content = self.lang_service.format_content(&content);
-        match self
+
+        let user_event_ref: SlimUserEmbeddingInput = match self
             .shared_log
             .find_similar_user_event(formatted_content.clone())
         {
-            Ok(response) => user_event_ref = response,
+            Ok(response) => response,
             Err(err) => return format!("unable to find similar user input: {:?}", err),
         };
 
         let agent_response = self
             .shared_log
             .fetch_ai_response_for_user_event(user_event_ref.user_event_id);
+
         match agent_response {
             Ok(response) => {
                 tracing::info!(
@@ -60,11 +61,11 @@ impl RetrievalEngine {
                     formatted_content.clone(),
                     response.get_content()
                 );
-                return response.get_content();
+                response.get_content()
             }
             Err(err) => {
                 tracing::error!("error when fetching agent response {}", err);
-                return "no agent response exists".to_string();
+                "no agent response exists".to_string()
             }
         }
     }
