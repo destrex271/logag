@@ -65,6 +65,81 @@ cargo run --release
 
 The server starts with both an MCP endpoint and an HTTP API.
 
+## Tool Integration
+
+LogAg acts as a **central memory store** across AI tools — Claude, Opencode, Codex, or any MCP/HTTP-compatible client. Record interactions from one tool and retrieve context from another.
+
+Currently, Opencode support is merged in the repo. Other integrations follow the same pattern.
+
+### Opencode Integration
+
+[Opencode](https://opencode.ai) integration uses two MCP servers and an auto-recording plugin. The setup consists of two parts — recording sessions and retrieving cached responses.
+
+#### Opencode Configuration
+
+Register both MCP servers in `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["/path/to/logag/AGENTS.md"],
+  "mcp": {
+    "logag": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8000/mcp"
+    },
+    "logag-read": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8000/read_mcp"
+    }
+  }
+}
+```
+
+### AGENTS.md
+
+Point to an `AGENTS.md` file that instructs the agent to check the cache on every query. This is referenced by the `instructions` field in your opencode config:
+
+```
+For every user query, first call `get_cached_agent_response` from the `logag-read`
+MCP server to check if there is already cached knowledge around that prompt.
+If cached content exists and is relevant, use it to inform your response.
+```
+
+### Plugin (Auto-Recording)
+
+The [opencode plugin](js/opencode_plugin.js) hooks into chat events and automatically sends user/agent message pairs to the HTTP endpoint. Load it in your opencode config:
+
+```json
+{
+  "plugins": ["/path/to/logag/js/opencode_plugin.js"]
+}
+```
+
+The plugin listens for `chat.message` and `message.part.updated` events, buffers the conversation, and POSTs completed user/agent pairs to `http://localhost:8000/record`.
+
+### Extending to Other Tools
+
+To integrate another tool (Claude, Codex, etc.):
+
+1. **Record** — send user/agent message pairs to `POST /record` (HTTP)
+2. **Retrieve** — call the `logag-read` MCP tool `get_cached_agent_response` with the user's query text
+3. **Configure** — register the MCP endpoints in that tool's MCP client config
+
+### Data Flow
+
+```
+Opencode session
+    │
+    ├─ Plugin captures user input + agent output
+    │  └─ POST /record ─→ LogAg stores as LogEvent + embedding
+    │
+    └─ Agent reads AGENTS.md
+       └─ Calls logag-read_get_cached_agent_response(text)
+          └─ MCP ─→ LogAg compares embedding via cosine distance
+             └─ Returns cached agent output if similar query exists
+```
+
 ## Usage
 
 LogAg exposes two interfaces:
