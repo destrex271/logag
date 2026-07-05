@@ -178,8 +178,5 @@ By contributing, you agree that your contributions will be licensed under the AG
 
 ## License
 
-Copyright © 2026 Akshat Jaimini
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 See the [LICENSE](LICENSE) file for the full license text.
