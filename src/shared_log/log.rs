@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::shared_log::traits::{Event, EventType};
+use crate::shared_log::traits::{Event, EventReference, EventType};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use uuid::Timestamp;
@@ -37,8 +37,11 @@ impl Event for LogEvent {
 }
 
 impl LogContent {
-    fn new(content: String) -> Self {
+    pub fn new(content: String) -> Self {
         Self { content }
+    }
+    pub fn get_content(&self) -> String{
+        self.content.clone()
     }
 }
 

@@ -3,7 +3,9 @@ use std::{error::Error, str::FromStr};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    global_config::GlobalConfig, shared_log::traits::Event, storage::postgres::PostgresStorage,
+    global_config::GlobalConfig,
+    shared_log::{log::LogContent, traits::Event, user_embedding_model::SlimUserEmbeddingInput},
+    storage::postgres::PostgresStorage,
 };
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -94,6 +96,14 @@ pub trait StorageEngine: Send + Sync + 'static {
         T: Event,
         F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
         Self: Sized;
+    async fn get_similar_user_input_embedding(
+        &self,
+        embedding: Vec<f32>,
+    ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors>;
+    async fn get_agent_output_for_user_input(
+        &self,
+        user_input_id: uuid::Uuid,
+    ) -> Result<LogContent, StorageEngineErrors>;
 }
 
 #[cfg(test)]

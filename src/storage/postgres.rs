@@ -1,9 +1,11 @@
+use crate::shared_log::log::LogContent;
 use crate::shared_log::traits::Event;
+use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
 use chrono::{DateTime, Utc};
 use log::LevelFilter;
 use sqlx::migrate::Migrator;
-use sqlx::{Pool, Postgres, pool::PoolConnection, postgres::PgPoolOptions};
+use sqlx::{Pool, Postgres, Row, pool::PoolConnection, postgres::PgPoolOptions};
 use uuid::Uuid;
 
 const MAX_CONNECTIONS: u8 = 5;
@@ -143,7 +145,8 @@ impl StorageEngine for PostgresStorage {
 
         query
             .execute(&mut *connection)
-            .await.map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+            .await
+            .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }
@@ -207,5 +210,234 @@ impl StorageEngine for PostgresStorage {
             .collect::<Result<Vec<T>, StorageEngineErrors>>()?;
 
         Ok(events)
+    }
+
+    async fn get_similar_user_input_embedding(
+        &self,
+        embedding: Vec<f32>,
+    ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors> {
+        let embedding_as_vec: String = format!(
+            "[{}]",
+            embedding
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let query = sqlx::query(
+            r#"
+            WITH closest_matches AS (
+                SELECT id, user_event_id FROM UserInputEmbedding ORDER BY embedding <=> $1::vector ASC LIMIT 1
+            )
+            SELECT * FROM closest_matches ORDER BY id DESC;
+            "#,
+        )
+        .bind(&embedding_as_vec);
+
+        let mut connection = self.acquire_connection().await?;
+        let rows = query
+            .fetch_all(&mut *connection)
+            .await
+            .map_err(|error| return StorageEngineErrors::DatabaseError(Box::new(error)))?;
+
+        let mut input_reference: Vec<SlimUserEmbeddingInput> = rows
+            .iter()
+            .map(|row| {
+                let id: uuid::Uuid = row.try_get("id").map_err(|_| {
+                    StorageEngineErrors::NoDataForField(format!("primary id not found"))
+                })?;
+
+                let user_event_id: uuid::Uuid = row.try_get("user_event_id").map_err(|_| {
+                    StorageEngineErrors::NoDataForField(format!("no user event id reference found"))
+                })?;
+
+                Ok(SlimUserEmbeddingInput {
+                    id: id,
+                    user_event_id: user_event_id,
+                })
+            })
+            .collect::<Result<Vec<SlimUserEmbeddingInput>, StorageEngineErrors>>()?
+            .into_iter()
+            .collect();
+
+        match input_reference.pop() {
+            Some(result) => Ok(result),
+            None => Err(StorageEngineErrors::NoDataForField(String::from(
+                "No similar user embeddings found.",
+            ))),
+        }
+    }
+
+    async fn get_agent_output_for_user_input(
+        &self,
+        user_input_id: uuid::Uuid,
+    ) -> Result<LogContent, StorageEngineErrors> {
+        let query1 = sqlx::query(
+            r#"
+            SELECT log_event_id FROM CachedAgentResponse where user_query_id = $1;
+            "#,
+        )
+        .bind(user_input_id);
+
+        let mut connection = self.acquire_connection().await?;
+        let rows = query1
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|error| return StorageEngineErrors::DatabaseError(Box::new(error)))?;
+
+        let mut event_id: uuid::Uuid;
+        if let Ok(id) = rows.try_get("log_event_id") {
+            event_id = id;
+        } else {
+            return Err(StorageEngineErrors::NoDataForField(format!(
+                "No log event id found for user event id {}",
+                user_input_id
+            )));
+        }
+
+        let query2 = sqlx::query(
+            r#"
+            SELECT content FROM LogEvent WHERE id=$1
+            "#,
+        )
+        .bind(event_id);
+        let row = query2
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|err| return StorageEngineErrors::DatabaseError(Box::new(err)))?;
+
+        if let Ok(content) = row.try_get("content") {
+            return Ok(LogContent::new(content));
+        };
+
+        Err(StorageEngineErrors::NoDataForField(format!(
+            "no content found for agent event {}",
+            event_id
+        )))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::global_config::GlobalConfig;
+    use crate::shared_log::log::{LogContent, LogEvent};
+    use crate::shared_log::traits::{Event, EventType};
+
+    // Helper function to create a test database connection string
+    fn get_test_connection_string() -> String {
+        "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string()
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_new() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string);
+        assert!(!storage.connection_string.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_store_and_retrieve_event() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        let timestamp = "1000000".to_string();
+        let event = LogEvent::new(
+            EventType::UserInput,
+            "test event content".to_string(),
+            timestamp.clone(),
+        );
+
+        storage.store_event(&event).await.unwrap();
+
+        let events: Vec<LogEvent> = storage
+            .get_events::<LogEvent, _>(
+                1000000,
+                2000000,
+                |id: uuid::Uuid, content: String, timestamp: isize, event_type: String| {
+                    let event_type_enum = match event_type.as_str() {
+                        "user_input" => EventType::UserInput,
+                        "agent_output" => EventType::AgentOutput,
+                        _ => panic!("Unknown event type"),
+                    };
+                    LogEvent::new(event_type_enum, content, timestamp.to_string())
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].get_content(), "test event content");
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_get_similar_user_input_embedding() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        let timestamp = "1000000".to_string();
+        let user_event = LogEvent::new(
+            EventType::UserInput,
+            "test user input".to_string(),
+            timestamp.clone(),
+        );
+
+        storage.store_event(&user_event).await.unwrap();
+
+        let embedding: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        let user_event_id = user_event.get_id();
+        storage
+            .store_user_input_embedding(user_event_id, &embedding)
+            .await
+            .unwrap();
+
+        let similar_embedding: Vec<f32> = vec![0.15, 0.25, 0.35, 0.45, 0.55];
+        let result = storage
+            .get_similar_user_input_embedding(similar_embedding)
+            .await
+            .unwrap();
+
+        assert_eq!(result.user_event_id, user_event_id);
+        assert_ne!(result.id, uuid::Uuid::nil());
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_get_agent_output_for_user_input() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        let user_timestamp = "1000000".to_string();
+        let user_event = LogEvent::new(
+            EventType::UserInput,
+            "test user input".to_string(),
+            user_timestamp.clone(),
+        );
+
+        let user_event_id = storage.store_event(&user_event).await.unwrap();
+
+        let agent_timestamp = "2000000".to_string();
+        let agent_event = LogEvent::new(
+            EventType::AgentOutput,
+            "test agent output".to_string(),
+            agent_timestamp.clone(),
+        );
+
+        let agent_event_id = storage.store_event(&agent_event).await.unwrap();
+
+        storage
+            .store_cached_agent_response(agent_event_id, user_event_id)
+            .await
+            .unwrap();
+
+        let log_content = storage
+            .get_agent_output_for_user_input(user_event_id)
+            .await
+            .unwrap();
+
+        assert_eq!(log_content.get_content(), "test agent output");
     }
 }
