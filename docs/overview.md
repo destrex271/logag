@@ -1,6 +1,10 @@
-Based on the code changes from the past 24 hours, several new components have been introduced (such as the `RetrievalEngine` and new shared log modules), and existing components (like `EventAggregator` and `PostgresStorage`) have been refactored. 
+Based on the code changes from the past 24 hours, several major architectural updates have been introduced:
+1. **Extraction of `AgentRecorder`**: Refactored out of `event_aggregator.rs` into its own module under `src/shared_log/agent_recorder.rs`.
+2. **Introduction of `RetrievalEngine`**: A new component that exposes a read-only MCP service (`/read_mcp`) and a tool (`get_cached_agent_response`) to retrieve cached agent responses based on semantic similarity.
+3. **Vector Similarity Search & Caching**: Added database-level support in `PostgresStorage` and the `StorageEngine` trait to query similar user embeddings and fetch corresponding cached agent outputs.
+4. **New Shared Log Models and Errors**: Introduced `SharedLogErrors` and embedding-related data structures (`SlimUserEmbeddingInput`, etc.).
 
-Here are the documentation updates for the affected files in the `docs` folder.
+Below are the updated and newly created documentation files within the `docs/` folder structure.
 
 ---
 
@@ -9,17 +13,22 @@ Here are the documentation updates for the affected files in the `docs` folder.
 ```markdown
 # Retrieval Engine
 
-The `RetrievalEngine` is a component responsible for querying the shared log to find and retrieve cached agent responses that correspond to similar user queries. It exposes these capabilities as Model Context Protocol (MCP) tools.
+The `RetrievalEngine` is a core component responsible for querying historical interaction logs and serving cached agent responses based on semantic similarity. It exposes a read-only Model Context Protocol (MCP) service.
 
 ## Overview
 
-When a user submits a query, the `RetrievalEngine` uses vector embeddings to perform a similarity search against previously recorded user inputs. If a close match is found, it retrieves the corresponding cached agent response, enabling efficient response reuse and caching.
+When a user submits a query, the `RetrievalEngine` uses vector embeddings to find the most semantically similar historical user query stored in the database. If a close match is found, it retrieves and returns the corresponding agent response that was previously generated and cached.
+
+## Endpoint
+
+The retrieval engine is exposed as an independent MCP service:
+* **Route**: `/read_mcp`
+* **Protocol**: Streamable HTTP Service (MCP)
 
 ## Structs and Types
 
 ### `RetrievalEngine`
-The main service struct that wraps the `AgentRecorder` shared log.
-
+The main engine struct holding a reference to the shared log recorder.
 ```rust
 pub struct RetrievalEngine {
     shared_log: Arc<AgentRecorder>,
@@ -27,11 +36,10 @@ pub struct RetrievalEngine {
 ```
 
 ### `ReadQuery`
-The input parameter structure for retrieving cached responses.
-
+The input parameter structure for querying the cache.
 ```rust
 pub struct ReadQuery {
-    pub content: String,
+    content: String,
 }
 ```
 
@@ -41,41 +49,14 @@ pub struct ReadQuery {
 Retrieves the latest agent output stored for a semantically similar user query.
 
 * **Description**: "Get latest agent output that was stored for similar user query."
-* **Parameters**: `ReadQuery` containing the query `content`.
+* **Parameters**: `ReadQuery` (containing the raw query string `content`).
 * **Returns**: `String` (The cached agent response, or an error message if no match is found).
 
-```rust
-#[tool(description = "Get latest agent output that was stored for similar user query.")]
-pub fn get_cached_agent_response(
-    &self,
-    Parameters(ReadQuery { content }): Parameters<ReadQuery>,
-) -> String
-```
-```
-
----
-
-### Update File: `docs/event_aggregator.md`
-
-```markdown
-# Event Aggregator
-
-The `EventAggregator` is responsible for receiving and processing incoming events (such as user inputs and agent outputs) and appending them to the shared log.
-
-## Refactoring Updates
-
-* **Decoupling**: The `AgentRecorder` struct and its associated tests have been moved out of `event_aggregator.rs` and relocated to the `shared_log::agent_recorder` module.
-* **Imports**: `EventAggregator` now imports `AgentRecorder` from `crate::shared_log::agent_recorder::AgentRecorder`.
-
-## Struct Definition
-
-```rust
-pub struct EventAggregator {
-    event_factory: EventFactory,
-    global_config: GlobalConfig,
-    shared_log: std::sync::Arc<AgentRecorder>,
-}
-```
+### Workflow
+1. Generates a vector embedding for the incoming `content` query.
+2. Queries the storage backend for the closest matching user input embedding.
+3. If a match is found, retrieves the associated cached agent response.
+4. Returns the content of the agent response.
 ```
 
 ---
@@ -85,68 +66,95 @@ pub struct EventAggregator {
 ```markdown
 # Agent Recorder
 
-The `AgentRecorder` is the concrete implementation of the `SharedLog` trait. It manages the persistence of standalone events, event pairs (user query + agent response), and handles embedding generation and similarity lookups.
+The `AgentRecorder` implements the `SharedLog` trait. It is responsible for writing events to the storage engine, generating vector embeddings for user inputs, and querying the log for similar historical events.
 
-## Overview
+> **Note**: This component was previously defined inside `event_aggregator.rs` and has been refactored into its own module under `src/shared_log/agent_recorder.rs`.
 
-`AgentRecorder` coordinates between:
-1. **Embedding Service**: Generates vector embeddings for user inputs using `FastEmbeddingService`.
-2. **Storage Engine**: Persists events, embeddings, and relationships into the configured database backend.
+## Initialization
 
-## Implementation of `SharedLog`
+The `AgentRecorder` is initialized asynchronously with a `GlobalConfig` to set up the storage backend and the embedding service.
+
+```rust
+pub struct AgentRecorder {
+    storage: Arc<OnceCell<Box<dyn StorageEngine>>>,
+    embedding_model: Arc<OnceCell<Mutex<Box<dyn EmbeddingsService>>>>,
+}
+```
+
+## Key Methods
 
 ### `append_event`
-Appends a standalone event to the storage backend asynchronously.
+Appends a standalone event to the log and persists it to the configured storage engine.
+* **Returns**: `uuid::Uuid` of the appended event.
 
 ### `append_event_pair`
-Appends a user input event and an agent output event. It triggers asynchronous embedding generation for the user input and links the agent response to the user query in the cache.
+Appends a pair of events (a `UserInput` and its corresponding `AgentOutput`).
+1. Persists both events.
+2. Generates vector embeddings for the `UserInput` content using `FastEmbeddingService`.
+3. Asynchronously stores the user input embedding and links the agent response to the user query in the cache table.
 
 ### `find_similar_user_event`
-Generates an embedding for the provided query content and searches the storage engine for the closest matching user input.
-
-```rust
-fn find_similar_user_event(
-    &self,
-    user_content: String,
-) -> Result<SlimUserEmbeddingInput, SharedLogErrors>
-```
+Generates an embedding for the provided query string and searches the storage engine for the closest matching historical user input.
+* **Returns**: `Result<SlimUserEmbeddingInput, SharedLogErrors>`
 
 ### `fetch_ai_response_for_user_event`
-Retrieves the cached agent response associated with a specific user input ID.
-
-```rust
-fn fetch_ai_response_for_user_event(
-    &self,
-    user_input_id: uuid::Uuid,
-) -> Result<LogContent, SharedLogErrors>
-```
+Retrieves the cached agent response associated with a specific user input event ID.
+* **Returns**: `Result<LogContent, SharedLogErrors>`
 ```
 
 ---
 
-### Update File: `docs/shared_log/traits.md`
+### Updated File: `docs/event_aggregator.md`
+
+```markdown
+# Event Aggregator
+
+The `EventAggregator` is the primary write-path component for capturing and logging events. It exposes an MCP service to record standalone events or event pairs (user inputs and agent outputs).
+
+## Refactoring Updates
+* **`AgentRecorder` Extraction**: The internal `AgentRecorder` struct and its associated storage/embedding logic have been moved to `src/shared_log/agent_recorder.rs`. `EventAggregator` now imports and utilizes `AgentRecorder` from the shared log module.
+
+## Endpoint
+* **Route**: `/mcp`
+* **Protocol**: Streamable HTTP Service (MCP)
+
+## Structs
+
+### `EventAggregator`
+```rust
+pub struct EventAggregator {
+    event_factory: EventFactory,
+    global_config: GlobalConfig,
+    shared_log: std::sync::Arc<AgentRecorder>,
+}
+```
+*(For details on how events are recorded and embedded, see the [Agent Recorder Documentation](./shared_log/agent_recorder.md).)*
+```
+
+---
+
+### New File: `docs/shared_log/traits.md`
 
 ```markdown
 # Shared Log Traits
 
-This document defines the core traits used by the shared logging and event recording system.
+Defines the core interfaces for logging and retrieving events within the system.
 
 ## `SharedLog` Trait
 
-The `SharedLog` trait has been expanded to support retrieval operations based on semantic similarity.
+The `SharedLog` trait has been expanded to support read/retrieval operations alongside append operations.
 
 ```rust
 pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid;
+    
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
     
-    /// Finds a user event semantically similar to the provided input string.
     fn find_similar_user_event(
         &self,
         user_input: String,
     ) -> Result<SlimUserEmbeddingInput, SharedLogErrors>;
     
-    /// Fetches the recorded AI response linked to a specific user event ID.
     fn fetch_ai_response_for_user_event(
         &self,
         user_input_id: uuid::Uuid,
@@ -156,7 +164,7 @@ pub trait SharedLog {
 
 ## `EventReference` Trait
 
-A new trait introduced to represent references to existing events.
+A new trait representing a reference to another event.
 
 ```rust
 pub trait EventReference: Send + Sync {
@@ -172,7 +180,7 @@ pub trait EventReference: Send + Sync {
 ```markdown
 # Shared Log Errors
 
-Defines the error types encountered during shared log operations, embedding generation, and retrieval.
+Defines the error types encountered during shared log operations, particularly during embedding generation and cache retrieval.
 
 ## `SharedLogErrors`
 
@@ -187,11 +195,9 @@ pub enum SharedLogErrors {
 ```
 
 ### Variants
-
-* **`UnexpectedStorageLevelError`**: Wraps errors bubbled up from the underlying database/storage engine.
-* **`NoMatchingEntry`**: Returned when a requested event or cached response does not exist.
-* **`UnableToGenerateEmbeddings`**: Returned when the embedding service fails to vectorize the input text.
-* **`UnknownError`**: Fallback for unspecified failures.
+* **`UnexpectedStorageLevelError`**: Wraps underlying database/storage errors.
+* **`NoMatchingEntry`**: Returned when no cached agent response exists for a given user event ID.
+* **`UnableToGenerateEmbeddings`**: Returned if the embedding service fails to vectorize the input text.
 ```
 
 ---
@@ -201,13 +207,12 @@ pub enum SharedLogErrors {
 ```markdown
 # User Embedding Models
 
-Data structures representing embeddings and cached relationships within the shared log.
+Data structures representing database records for user input embeddings and cached agent responses.
 
 ## Structs
 
 ### `UserEmbeddingInput`
 Represents the full embedding record stored in the database.
-
 ```rust
 pub struct UserEmbeddingInput {
     id: uuid::Uuid,
@@ -217,8 +222,7 @@ pub struct UserEmbeddingInput {
 ```
 
 ### `SlimUserEmbeddingInput`
-A lightweight representation of a user embedding record, containing only the identifiers. Used for fast lookups and passing references.
-
+A lightweight representation of an embedding record, omitting the raw vector data. Used for quick lookups and references.
 ```rust
 pub struct SlimUserEmbeddingInput {
     pub id: uuid::Uuid,
@@ -227,8 +231,7 @@ pub struct SlimUserEmbeddingInput {
 ```
 
 ### `CachedAgentResponse`
-Represents the mapping between a user query and the corresponding agent response.
-
+Represents the mapping between a cached agent response and the user query that triggered it.
 ```rust
 pub struct CachedAgentResponse {
     id: uuid::Uuid,
@@ -240,18 +243,19 @@ pub struct CachedAgentResponse {
 
 ---
 
-### Update File: `docs/storage/traits.md`
+### Updated File: `docs/storage/traits.md`
 
 ```markdown
 # Storage Engine Traits
 
-The `StorageEngine` trait defines the interface that any database backend must implement.
+The `StorageEngine` trait defines the interface that any storage backend (e.g., PostgreSQL) must implement.
 
-## Updated `StorageEngine` Trait
+## Updated Trait Methods
 
-The trait has been updated with two new asynchronous methods to support semantic search and response retrieval.
+The following methods have been added to the `StorageEngine` trait to support semantic search and response retrieval:
 
 ```rust
+#[async_trait::async_trait]
 pub trait StorageEngine: Send + Sync + 'static {
     // ... existing methods ...
 
@@ -261,7 +265,7 @@ pub trait StorageEngine: Send + Sync + 'static {
         embedding: Vec<f32>,
     ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors>;
 
-    /// Retrieves the cached agent response content associated with a user input ID.
+    /// Retrieves the cached agent response content associated with a specific user input event ID.
     async fn get_agent_output_for_user_input(
         &self,
         user_input_id: uuid::Uuid,
@@ -272,20 +276,19 @@ pub trait StorageEngine: Send + Sync + 'static {
 
 ---
 
-### Update File: `docs/storage/postgres.md`
+### Updated File: `docs/storage/postgres.md`
 
 ```markdown
-# Postgres Storage Backend
+# PostgreSQL Storage Backend
 
-PostgreSQL implementation of the `StorageEngine` trait.
+The `PostgresStorage` struct implements the `StorageEngine` trait, providing persistent storage using PostgreSQL and vector similarity search capabilities.
 
-## Vector Search & Cache Retrieval
+## Vector Search Implementation
 
-The Postgres backend utilizes the `pgvector` extension (via the `<=>` cosine distance operator) to perform similarity searches on user input embeddings.
+`PostgresStorage` utilizes the pgvector extension (specifically the `<=>` cosine distance operator) to perform semantic similarity searches.
 
 ### `get_similar_user_input_embedding`
-Executes a cosine distance query against the `UserInputEmbedding` table to find the single closest match to the provided embedding vector.
-
+Executes a query to find the closest matching vector in the `UserInputEmbedding` table.
 ```sql
 WITH closest_matches AS (
     SELECT id, user_event_id 
@@ -297,7 +300,7 @@ SELECT * FROM closest_matches ORDER BY id DESC;
 ```
 
 ### `get_agent_output_for_user_input`
-Performs a two-step lookup:
-1. Finds the `log_event_id` from the `CachedAgentResponse` table matching the given `user_query_id`.
-2. Retrieves the text `content` from the `LogEvent` table matching that `log_event_id`.
+Retrieves the cached agent response content by:
+1. Querying the `CachedAgentResponse` table for the `log_event_id` associated with the given `user_query_id`.
+2. Querying the `LogEvent` table to fetch the raw text `content` of that agent event.
 ```
