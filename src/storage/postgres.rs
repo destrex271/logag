@@ -179,7 +179,9 @@ impl StorageEngine for PostgresStorage {
             .iter()
             .map(|row| {
                 let user_event_id: uuid::Uuid = row.try_get("user_event_id").map_err(|_| {
-                    StorageEngineErrors::NoDataForField("no user event id reference found".to_string())
+                    StorageEngineErrors::NoDataForField(
+                        "no user event id reference found".to_string(),
+                    )
                 })?;
 
                 Ok(SlimUserEmbeddingInput { user_event_id })
