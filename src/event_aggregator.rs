@@ -51,9 +51,10 @@ impl EventAggregator {
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
+        let formatted_content = self.format_content(&content);
         self.shared_log
             .append_event(self.event_factory.create_log_event(
-                content,
+                formatted_content,
                 unix_epoch_timestamp,
                 event_type,
             ));
@@ -70,17 +71,23 @@ impl EventAggregator {
     ) -> String {
         self.shared_log.append_event_pair(
             self.event_factory.create_log_event(
-                user_content,
+                self.format_content(&user_content),
                 unix_epoch_timestamp.clone(),
                 EventType::UserInput,
             ),
             self.event_factory.create_log_event(
-                agent_content,
+                self.format_content(&agent_content),
                 unix_epoch_timestamp,
                 EventType::AgentOutput,
             ),
         );
         "success".to_string()
+    }
+
+    fn format_content(&self, content: &str) -> String{
+        // TODO(destrex271): Use NLP techniques like stemming etc to improve data quality.
+        let new_content = content.trim().to_lowercase();
+        new_content.to_string()
     }
 }
 

@@ -221,6 +221,20 @@ pub(crate) mod test_utils {
             Ok(())
         }
 
+        async fn get_similar_user_input_embedding(
+            &self,
+            _embedding: Vec<f32>,
+        ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors> {
+            Err(StorageEngineErrors::NoDataForField("mock: no data".into()))
+        }
+
+        async fn get_agent_output_for_user_input(
+            &self,
+            _user_input_id: uuid::Uuid,
+        ) -> Result<LogContent, StorageEngineErrors> {
+            Err(StorageEngineErrors::NoDataForField("mock: no data".into()))
+        }
+
         async fn get_events<T, F>(
             &self,
             _from_timestamp: isize,

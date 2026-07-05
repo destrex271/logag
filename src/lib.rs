@@ -5,5 +5,6 @@ pub(crate) mod harnesses;
 pub mod http_response_handler;
 pub mod observability;
 pub mod retrieval_engine;
+pub mod language_handler;
 mod shared_log;
 mod storage;
