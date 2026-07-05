@@ -78,7 +78,7 @@ LogAg exposes two interfaces:
 
 | Tool | Description |
 |------|-------------|
-| `logag_add_event` | Register a user/agent/thinking event |
+| `logag_add_event` | Register a user/agent/thinking event - Not recommended since plugin based reads are more reliable and controllable |
 | `logag-read_get_cached_agent_response` | Retrieve cached agent output for a similar user query |
 
 ## Configuration
