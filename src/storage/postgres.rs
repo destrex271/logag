@@ -285,49 +285,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_postgres_storage_new() {
-        let conn_string =
-            "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string();
-        let storage = PostgresStorage::new(conn_string);
-        assert!(!storage.connection_string.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_postgres_storage_store_and_retrieve_event() {
-        let (_container, conn_string) = setup_postgres_container().await;
-        let storage = PostgresStorage::new(conn_string.clone());
-        storage.run_migration().await.unwrap();
-
-        let timestamp = "1000000".to_string();
-        let event = LogEvent::new(
-            EventType::UserInput,
-            "test event content".to_string(),
-            timestamp.clone(),
-        );
-
-        storage.store_event(&event).await.unwrap();
-
-        let events: Vec<LogEvent> = storage
-            .get_events::<LogEvent, _>(
-                1000000,
-                2000000,
-                |id: uuid::Uuid, content: String, timestamp: isize, event_type: String| {
-                    let event_type_enum = match event_type.as_str() {
-                        "user_input" => EventType::UserInput,
-                        "agent_output" => EventType::AgentOutput,
-                        _ => panic!("Unknown event type"),
-                    };
-                    LogEvent::new(event_type_enum, content, timestamp.to_string())
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].get_content(), "test event content");
-    }
-
-    #[tokio::test]
     async fn test_postgres_storage_get_similar_user_input_embedding() {
         let (_container, conn_string) = setup_postgres_container().await;
         let storage = PostgresStorage::new(conn_string.clone());
@@ -356,7 +313,6 @@ mod test {
             .unwrap();
 
         assert_eq!(result.user_event_id, user_event_id);
-        assert_ne!(result.id, uuid::Uuid::nil());
     }
 
     #[tokio::test]

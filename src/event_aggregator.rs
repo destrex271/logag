@@ -90,6 +90,21 @@ impl EventAggregator {
 }
 
 #[cfg(test)]
+impl EventAggregator {
+    pub fn new_with_recorder(recorder: std::sync::Arc<AgentRecorder>) -> Self {
+        EventAggregator {
+            event_factory: EventFactory::new(),
+            shared_log: recorder,
+            global_config: GlobalConfig {
+                storage_backend: crate::storage::traits::StorageBackend::Postgres,
+                database_connection_string: "postgres://localhost:5432/test".into(),
+            },
+            lang_service: LanguageService::new(),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;

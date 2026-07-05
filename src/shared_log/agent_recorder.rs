@@ -241,20 +241,6 @@ pub(crate) mod test_utils {
         ) -> Result<LogContent, StorageEngineErrors> {
             Err(StorageEngineErrors::NoDataForField("mock: no data".into()))
         }
-
-        async fn get_events<T, F>(
-            &self,
-            _from_timestamp: isize,
-            _to_timestamp: isize,
-            _factory_fn: F,
-        ) -> Result<Vec<T>, StorageEngineErrors>
-        where
-            T: Event,
-            F: Fn(uuid::Uuid, String, isize, String) -> T + Send,
-            Self: Sized,
-        {
-            Ok(Vec::new())
-        }
     }
 }
 

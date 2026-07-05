@@ -37,17 +37,20 @@ impl HTTPResponseHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::global_config::GlobalConfig;
-    use crate::storage::traits::StorageBackend;
+    use crate::event_aggregator::EventAggregator;
+    use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
+    use crate::shared_log::agent_recorder::AgentRecorder;
     use axum::routing::post;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
     use tower::util::ServiceExt;
 
     fn test_handler() -> HTTPResponseHandler {
-        let config = GlobalConfig {
-            storage_backend: StorageBackend::Postgres,
-            database_connection_string: "postgres://localhost:5432/test".into(),
-        };
-        HTTPResponseHandler::new(EventAggregator::new(config))
+        let engine = Box::new(MockStorageEngine {
+            store_count: Arc::new(AtomicUsize::new(0)),
+        });
+        let recorder = Arc::new(AgentRecorder::new_with_storage(engine));
+        HTTPResponseHandler::new(EventAggregator::new_with_recorder(recorder))
     }
 
     #[tokio::test(flavor = "multi_thread")]
