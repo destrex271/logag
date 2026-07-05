@@ -228,7 +228,7 @@ impl StorageEngine for PostgresStorage {
         let query = sqlx::query(
             r#"
             WITH closest_matches AS (
-                SELECT id, user_event_id FROM UserInputEmbedding ORDER BY embedding <=> $1::vector DESC LIMIT 1
+                SELECT id, user_event_id FROM UserInputEmbedding ORDER BY embedding <=> $1::vector ASC LIMIT 1
             )
             SELECT * FROM closest_matches ORDER BY id DESC;
             "#,
