@@ -1,18 +1,109 @@
-# LogAct implementation
+# LogAg — Agentic Memory Optimization
 
-This is an agentic harness to produce software with the following aims:
- - Agent Records its actions
- - Each loop uses understanding developed in previous runs
- - Every new agent spawn should have the identical + enhanced behavior of its predecessor. Eg: If agent crashes midway, new spawned agent 
-   should resume as if it were a clone of that agent.
+LogAg is an agentic memory optimization tool that records user–LLM interactions, builds a semantic cache of past queries and responses, and retrieves relevant context for new sessions — reducing token waste and improving agent continuity.
 
+## Features
 
+- **Semantic caching** — stores user queries and agent responses, retrieves similar past interactions using vector embeddings (pgvector + fastembed)
+- **Agent continuity** — if an agent crashes mid-run, a new spawn resumes as if it were a clone of its predecessor
+- **Dual protocol support** — serves via MCP (Model Context Protocol) and HTTP (Axum)
+- **Pluggable backends** — storage and embedding services are trait-based for easy swapping
+- **Self-improving** — each loop leverages understanding developed in previous runs
 
+## Architecture
 
-**THE WHAT**:  Logag is a tool which tracks user interaction and llm outputs and prepares a dictionary for the LLM. It also handles evolving context of the codebase/source data without forcing the LLM to read the entire codebase again.
+```mermaid
+flowchart LR
+    A[User / AI Client] --> B{MCP}
+    A --> C{HTTP}
+    B --> D[retrieval_engine]
+    C --> E[api_handler]
+    D --> F[AgentRecorder]
+    E --> F
+    F --> G[(Postgres + pgvector)]
+    F --> H[fastembed]
+    G --> I[LogEvent DB]
+    I --> J[Context for next prompt]
+```
 
+## Installation
 
-**THE WHY**: LLMs/Agents waste a lot of tokens answering same user queries which usually have similar answers. This token usage can be better utilized across other functions like code generation or research from external sources like the web instead of re-reading an exisitng source.
+### Prerequisites
 
+- Rust 2024 edition (`rustc` ≥ 1.85)
+- PostgreSQL 16+ with the `pgvector` extension
+- Docker (optional, for local Postgres)
 
-**THE HOW**: Store a Cache of user queries to agent answers. Agent answers should be invalidated if there is an update in that specific part of the base static source, in this case a codebase.
+### 1. Start PostgreSQL with pgvector
+
+```bash
+docker compose up -d
+```
+
+### 2. Configure
+
+Copy the sample config and adjust the connection string:
+
+```bash
+cp config/sample.toml config/config.toml
+```
+
+The configuration file uses the following format:
+
+```toml
+database_connection_string = "postgres://myuser:mysecretpassword@127.0.0.1:5432/mydatabase"
+storage_backend = "postgres"
+```
+
+### 3. Build and run
+
+```bash
+cargo build --release
+cargo run --release
+```
+
+The server starts with both an MCP endpoint and an HTTP API.
+
+## Usage
+
+LogAg exposes two interfaces:
+
+| Interface | Description |
+|-----------|-------------|
+| **MCP**   | Model Context Protocol — plug into any MCP-compatible AI client |
+| **HTTP**  | REST API for custom integrations |
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `logag_add_event` | Register a user/agent/thinking event |
+| `logag-read_get_cached_agent_response` | Retrieve cached agent output for a similar user query |
+
+## Configuration
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `database_connection_string` | Postgres DSN with pgvector | — |
+| `storage_backend` | Storage engine to use (`postgres`) | `postgres` |
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Open an issue** first to discuss the change you'd like to make.
+2. **Branch from `main`** and submit a pull request.
+3. **Keep commits small** and use conventional commit messages (e.g. `feat:`, `fix:`, `refactor:`).
+4. **Run `cargo fmt`** and **`cargo clippy`** before pushing.
+5. **Add tests** for new functionality. Integration tests requiring Postgres use `#[cfg(test)]` and a configurable connection string.
+6. **Update `AGENTS.md`** if your change affects how the agent interacts with the codebase.
+
+By contributing, you agree that your contributions will be licensed under the AGPL-3.0 license.
+
+## License
+
+Copyright © 2026 Akshat Jaimini
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+See the [LICENSE](LICENSE) file for the full license text.
