@@ -73,7 +73,7 @@ Currently, Opencode support is merged in the repo. Other integrations follow the
 
 ### Opencode Integration
 
-See the dedicated guide at [docs/using_with_opencode.md](docs/using_with_opencode.md) for full setup instructions — configuring MCP servers, installing the auto-recording plugin, and the data flow.
+See the dedicated guide at [docs/using_with_opencode.md](docs/using_with_opencode.md) for full setup instructions — configuring MCP servers, installing the auto-recording plugin (via `bash js/installer.sh` or manually), and the data flow.
 
 ### Extending to Other Tools
 

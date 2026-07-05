@@ -59,6 +59,16 @@ If cached content exists and is relevant, use it to inform your response.
 
 The [opencode plugin](../js/opencode_plugin.js) hooks into chat events and automatically sends user/agent message pairs to `POST /record`.
 
+**Option A — Install script:**
+
+```bash
+bash js/installer.sh
+```
+
+This copies the plugin to `~/.opencode/plugins/forward.ts`.
+
+**Option B — Manual install:**
+
 Add it to your `opencode.json`:
 
 ```json
