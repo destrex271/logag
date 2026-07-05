@@ -1,11 +1,11 @@
 use crate::embeddings::fastembed::FastEmbeddingService;
 use crate::embeddings::traits::EmbeddingsService;
+use crate::global_config::GlobalConfig;
 use crate::shared_log::errors::SharedLogErrors;
 use crate::shared_log::log::LogContent;
+use crate::shared_log::traits::{Event, SharedLog};
 use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 use crate::storage::traits::{StorageBackendProvider, StorageEngine, StorageEngineErrors};
-use crate::shared_log::traits::{Event, SharedLog};
-use crate::global_config::GlobalConfig;
 use tokio::runtime::Handle;
 use tokio::sync::OnceCell;
 
@@ -31,7 +31,9 @@ impl AgentRecorder {
         });
 
         let model = FastEmbeddingService::new().unwrap();
-        let _ = self.embedding_model.set(std::sync::Mutex::new(Box::new(model)));
+        let _ = self
+            .embedding_model
+            .set(std::sync::Mutex::new(Box::new(model)));
     }
 }
 
@@ -57,7 +59,7 @@ impl SharedLog for AgentRecorder {
         });
 
         tracing::info!("appeneded event");
-        return id
+        return id;
     }
 
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>) {
@@ -67,82 +69,79 @@ impl SharedLog for AgentRecorder {
 
         // Generate Embeddings for user.
         tracing::info_span!("generating_embeddings");
-        let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(
-            |model| {
-                model.lock().ok().and_then(
-                    |mut m| {
-                        m.generate_embeddings(
-                            vec![user_content]
-                        )
-                            .ok()
-                            .and_then(|v| v.into_iter().next())
-                    }
-                )
-            }
-        );
+        let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(|model| {
+            model.lock().ok().and_then(|mut m| {
+                m.generate_embeddings(vec![user_content])
+                    .ok()
+                    .and_then(|v| v.into_iter().next())
+            })
+        });
         tracing::info_span!("generated embeddings");
 
         let storage = self.storage.clone();
-        tokio::spawn(async move{
+        tokio::spawn(async move {
             tracing::info!("inserting user embeddings for event id: {}", user_event_id);
             // Store embeddings.
-            if let Some(embed) = embeddings{
-                if let Some(engine) = storage.get(){
-                    let _ = engine.store_user_input_embedding(user_event_id, &embed).await;
+            if let Some(embed) = embeddings {
+                if let Some(engine) = storage.get() {
+                    let _ = engine
+                        .store_user_input_embedding(user_event_id, &embed)
+                        .await;
                 }
             }
             tracing::info!("inserted user embeddings for event id: {}", user_event_id);
 
             // Store agent response.
-            tracing::info!("inserting agent output cache for event id: {} for user query {}", agent_event_id, user_event_id);
+            tracing::info!(
+                "inserting agent output cache for event id: {} for user query {}",
+                agent_event_id,
+                user_event_id
+            );
             if let Some(engine) = storage.get() {
-                let  _ = engine.store_cached_agent_response(agent_event_id, user_event_id).await;
+                let _ = engine
+                    .store_cached_agent_response(agent_event_id, user_event_id)
+                    .await;
             }
             tracing::info!("inserted agent output.")
         });
-
     }
 
     fn find_similar_user_event(
         &self,
-        user_input: Box<dyn Event>
-    ) -> Result<SlimUserEmbeddingInput, SharedLogErrors>{
-
+        user_input: Box<dyn Event>,
+    ) -> Result<SlimUserEmbeddingInput, SharedLogErrors> {
         // Generate embedding.
         let user_content: String = user_input.get_content();
-        let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(
-            |model| {
-                model.lock().ok().and_then(
-                    |mut m| {
-                        m.generate_embeddings(
-                            vec![user_content.clone()]
-                        )
-                            .ok()
-                            .and_then(|v| v.into_iter().next())
-                    }
-                )
-            }
-        );
+        let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(|model| {
+            model.lock().ok().and_then(|mut m| {
+                m.generate_embeddings(vec![user_content.clone()])
+                    .ok()
+                    .and_then(|v| v.into_iter().next())
+            })
+        });
 
         let mut embeddings_data: Vec<f32> = vec![];
-        match embeddings{
+        match embeddings {
             Some(data) => {
                 embeddings_data = data;
-            },
-            None => return Err(SharedLogErrors::UnableToGenerateEmbeddings(
-                format!("Unable to generate vector embeddings for {}", user_content.clone())
-            ))
+            }
+            None => {
+                return Err(SharedLogErrors::UnableToGenerateEmbeddings(format!(
+                    "Unable to generate vector embeddings for {}",
+                    user_content.clone()
+                )));
+            }
         };
 
         let storage = self.storage.clone();
         let engine = storage.get().unwrap();
         let handle = Handle::current();
-        let result: Result<SlimUserEmbeddingInput, StorageEngineErrors> 
-            = handle.block_on(engine.get_similar_user_input_embedding(embeddings_data));
+        let result: Result<SlimUserEmbeddingInput, StorageEngineErrors> =
+            handle.block_on(engine.get_similar_user_input_embedding(embeddings_data));
 
-        match result{
+        match result {
             Ok(response) => Ok(response),
-            Err(err) => Err(SharedLogErrors::UnexpectedStorageLevelError(err))
+            Err(err) => Err(SharedLogErrors::UnexpectedStorageLevelError(err)),
         }
     }
 
@@ -298,5 +297,4 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         assert_eq!(store_count.load(Ordering::SeqCst), 5);
     }
-
 }

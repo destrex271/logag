@@ -1,6 +1,6 @@
 use crate::global_config::GlobalConfig;
-use crate::shared_log::traits::{EventFactory, EventType, SharedLog};
 use crate::shared_log::agent_recorder::AgentRecorder;
+use crate::shared_log::traits::{EventFactory, EventType, SharedLog};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
@@ -88,7 +88,7 @@ impl EventAggregator {
 mod tests {
     use super::*;
     use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
-    use crate::shared_log::traits::{EventType};
+    use crate::shared_log::traits::EventType;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test(flavor = "multi_thread")]

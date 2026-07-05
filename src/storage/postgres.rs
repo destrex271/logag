@@ -1,12 +1,12 @@
 use crate::shared_log::log::LogContent;
 use crate::shared_log::traits::Event;
+use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
 use chrono::{DateTime, Utc};
 use log::LevelFilter;
 use sqlx::migrate::Migrator;
 use sqlx::{Pool, Postgres, Row, pool::PoolConnection, postgres::PgPoolOptions};
 use uuid::Uuid;
-use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 
 const MAX_CONNECTIONS: u8 = 5;
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -145,7 +145,8 @@ impl StorageEngine for PostgresStorage {
 
         query
             .execute(&mut *connection)
-            .await.map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+            .await
+            .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }
@@ -215,7 +216,6 @@ impl StorageEngine for PostgresStorage {
         &self,
         embedding: Vec<f32>,
     ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors> {
-
         let embedding_as_vec: String = format!(
             "[{}]",
             embedding
@@ -241,19 +241,18 @@ impl StorageEngine for PostgresStorage {
             .await
             .map_err(|error| return StorageEngineErrors::DatabaseError(Box::new(error)))?;
 
-        let mut input_reference: Vec<SlimUserEmbeddingInput> = rows.iter()
+        let mut input_reference: Vec<SlimUserEmbeddingInput> = rows
+            .iter()
             .map(|row| {
-                let id: uuid::Uuid = row.try_get("id")
-                    .map_err(|_| StorageEngineErrors::NoDataForField(format!(
-                        "primary id not found"
-                    )))?;
+                let id: uuid::Uuid = row.try_get("id").map_err(|_| {
+                    StorageEngineErrors::NoDataForField(format!("primary id not found"))
+                })?;
 
-                let user_event_id: uuid::Uuid = row.try_get("user_event_id")
-                    .map_err(|_| StorageEngineErrors::NoDataForField(format!(
-                        "no user event id reference found"
-                    )))?;
+                let user_event_id: uuid::Uuid = row.try_get("user_event_id").map_err(|_| {
+                    StorageEngineErrors::NoDataForField(format!("no user event id reference found"))
+                })?;
 
-                Ok(SlimUserEmbeddingInput{
+                Ok(SlimUserEmbeddingInput {
                     id: id,
                     user_event_id: user_event_id,
                 })
@@ -264,23 +263,22 @@ impl StorageEngine for PostgresStorage {
 
         match input_reference.pop() {
             Some(result) => Ok(result),
-            None => Err(
-                StorageEngineErrors::NoDataForField(
-                    String::from("No similar user embeddings found.")
-                )
-            )
+            None => Err(StorageEngineErrors::NoDataForField(String::from(
+                "No similar user embeddings found.",
+            ))),
         }
     }
 
     async fn get_agent_output_for_user_input(
         &self,
-        user_input_id: uuid::Uuid
+        user_input_id: uuid::Uuid,
     ) -> Result<LogContent, StorageEngineErrors> {
         let query1 = sqlx::query(
             r#"
             SELECT log_event_id FROM CachedAgentResponse where user_query_id = $1;
             "#,
-        ).bind(user_input_id);
+        )
+        .bind(user_input_id);
 
         let mut connection = self.acquire_connection().await?;
         let rows = query1
@@ -288,41 +286,43 @@ impl StorageEngine for PostgresStorage {
             .await
             .map_err(|error| return StorageEngineErrors::DatabaseError(Box::new(error)))?;
 
-
         let mut event_id: uuid::Uuid;
-        if let Ok(id) = rows.try_get("log_event_id"){
+        if let Ok(id) = rows.try_get("log_event_id") {
             event_id = id;
-        }else{
-            return Err(StorageEngineErrors::NoDataForField(format!("No log event id found for user event id {}", user_input_id)));
+        } else {
+            return Err(StorageEngineErrors::NoDataForField(format!(
+                "No log event id found for user event id {}",
+                user_input_id
+            )));
         }
 
         let query2 = sqlx::query(
             r#"
             SELECT content FROM LogEvent WHERE id=$1
             "#,
-        ).bind(event_id);
+        )
+        .bind(event_id);
         let row = query2
             .fetch_one(&mut *connection)
             .await
             .map_err(|err| return StorageEngineErrors::DatabaseError(Box::new(err)))?;
 
-        if let Ok(content) = row.try_get("content"){
+        if let Ok(content) = row.try_get("content") {
             return Ok(LogContent::new(content));
         };
 
-        Err(StorageEngineErrors::NoDataForField(
-            format!("no content found for agent event {}", event_id)
-        ))
+        Err(StorageEngineErrors::NoDataForField(format!(
+            "no content found for agent event {}",
+            event_id
+        )))
     }
-
 }
-
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::global_config::GlobalConfig;
-    use crate::shared_log::log::{LogEvent, LogContent};
+    use crate::shared_log::log::{LogContent, LogEvent};
     use crate::shared_log::traits::{Event, EventType};
 
     // Helper function to create a test database connection string
@@ -344,7 +344,11 @@ mod test {
         storage.run_migration().await.unwrap();
 
         let timestamp = "1000000".to_string();
-        let event = LogEvent::new(EventType::UserInput, "test event content".to_string(), timestamp.clone());
+        let event = LogEvent::new(
+            EventType::UserInput,
+            "test event content".to_string(),
+            timestamp.clone(),
+        );
 
         storage.store_event(&event).await.unwrap();
 
