@@ -25,7 +25,7 @@ pub trait SharedLog {
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
     fn find_similar_user_event(
         &self,
-        user_input: Box<dyn Event>,
+        user_input: String,
     ) -> Result<SlimUserEmbeddingInput, SharedLogErrors>;
     fn fetch_ai_response_for_user_event(
         &self,

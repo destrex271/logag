@@ -7,6 +7,7 @@ use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
 use logag::http_response_handler::HTTPResponseHandler;
 use logag::observability::Observability;
+use logag::retrieval_engine::RetrievalEngine;
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -34,11 +35,20 @@ async fn main() -> anyhow::Result<()> {
 
     Observability::init();
 
+    let retrieval_engine = RetrievalEngine::new(config.clone());
     let aggregator = EventAggregator::new(config);
+
     let mcp_aggregator = aggregator.clone();
+    let mcp_retrieval_engine = retrieval_engine.clone();
 
     let mcp_service = StreamableHttpService::new(
         move || Ok(mcp_aggregator.clone()),
+        LocalSessionManager::default().into(),
+        StreamableHttpServerConfig::default(),
+    );
+
+    let read_mcp_service = StreamableHttpService::new(
+        move || Ok(mcp_retrieval_engine.clone()),
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
@@ -47,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
 
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
+        .nest_service("/read_mcp", read_mcp_service)
         .route("/record", post(HTTPResponseHandler::handle_post_response))
         .with_state(http_handler);
     let tcp_listener = tokio::net::TcpListener::bind(MCP_BIND_ADDR).await?;

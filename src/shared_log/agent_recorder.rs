@@ -108,10 +108,9 @@ impl SharedLog for AgentRecorder {
 
     fn find_similar_user_event(
         &self,
-        user_input: Box<dyn Event>,
+        user_content: String,
     ) -> Result<SlimUserEmbeddingInput, SharedLogErrors> {
         // Generate embedding.
-        let user_content: String = user_input.get_content();
         let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(|model| {
             model.lock().ok().and_then(|mut m| {
                 m.generate_embeddings(vec![user_content.clone()])
