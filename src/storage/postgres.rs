@@ -371,4 +371,73 @@ mod test {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].get_content(), "test event content");
     }
+
+    #[tokio::test]
+    async fn test_postgres_storage_get_similar_user_input_embedding() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        let timestamp = "1000000".to_string();
+        let user_event = LogEvent::new(
+            EventType::UserInput,
+            "test user input".to_string(),
+            timestamp.clone(),
+        );
+
+        storage.store_event(&user_event).await.unwrap();
+
+        let embedding: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        let user_event_id = user_event.get_id();
+        storage
+            .store_user_input_embedding(user_event_id, &embedding)
+            .await
+            .unwrap();
+
+        let similar_embedding: Vec<f32> = vec![0.15, 0.25, 0.35, 0.45, 0.55];
+        let result = storage
+            .get_similar_user_input_embedding(similar_embedding)
+            .await
+            .unwrap();
+
+        assert_eq!(result.user_event_id, user_event_id);
+        assert_ne!(result.id, uuid::Uuid::nil());
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_get_agent_output_for_user_input() {
+        let conn_string = get_test_connection_string();
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        let user_timestamp = "1000000".to_string();
+        let user_event = LogEvent::new(
+            EventType::UserInput,
+            "test user input".to_string(),
+            user_timestamp.clone(),
+        );
+
+        let user_event_id = storage.store_event(&user_event).await.unwrap();
+
+        let agent_timestamp = "2000000".to_string();
+        let agent_event = LogEvent::new(
+            EventType::AgentOutput,
+            "test agent output".to_string(),
+            agent_timestamp.clone(),
+        );
+
+        let agent_event_id = storage.store_event(&agent_event).await.unwrap();
+
+        storage
+            .store_cached_agent_response(agent_event_id, user_event_id)
+            .await
+            .unwrap();
+
+        let log_content = storage
+            .get_agent_output_for_user_input(user_event_id)
+            .await
+            .unwrap();
+
+        assert_eq!(log_content.get_content(), "test agent output");
+    }
 }
