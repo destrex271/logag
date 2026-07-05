@@ -346,7 +346,8 @@ mod test {
             .await
             .expect("Failed to get host port");
 
-        let connection_string = format!("postgres://testuser:testpassword@127.0.0.1:{port}/testdatabase");
+        let connection_string =
+            format!("postgres://testuser:testpassword@127.0.0.1:{port}/testdatabase");
 
         // Wait a moment for the pool to stabilize
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -356,7 +357,8 @@ mod test {
 
     #[tokio::test]
     async fn test_postgres_storage_new() {
-        let conn_string = "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string();
+        let conn_string =
+            "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string();
         let storage = PostgresStorage::new(conn_string);
         assert!(!storage.connection_string.is_empty());
     }

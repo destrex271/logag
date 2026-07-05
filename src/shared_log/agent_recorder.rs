@@ -136,7 +136,9 @@ impl SharedLog for AgentRecorder {
         let engine = storage.get().unwrap();
         let handle = Handle::current();
         let result: Result<SlimUserEmbeddingInput, StorageEngineErrors> =
-            tokio::task::block_in_place(|| handle.block_on(engine.get_similar_user_input_embedding(embeddings_data)));
+            tokio::task::block_in_place(|| {
+                handle.block_on(engine.get_similar_user_input_embedding(embeddings_data))
+            });
 
         match result {
             Ok(response) => Ok(response),
@@ -151,8 +153,9 @@ impl SharedLog for AgentRecorder {
         let storage = self.storage.clone();
         let engine = storage.get().unwrap();
         let handle = Handle::current();
-        let result: Result<LogContent, StorageEngineErrors> =
-            tokio::task::block_in_place(|| handle.block_on(engine.get_agent_output_for_user_input(user_input_id)));
+        let result: Result<LogContent, StorageEngineErrors> = tokio::task::block_in_place(|| {
+            handle.block_on(engine.get_agent_output_for_user_input(user_input_id))
+        });
 
         match result {
             Ok(response) => Ok(response),

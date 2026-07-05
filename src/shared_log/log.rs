@@ -40,7 +40,7 @@ impl LogContent {
     pub fn new(content: String) -> Self {
         Self { content }
     }
-    pub fn get_content(&self) -> String{
+    pub fn get_content(&self) -> String {
         self.content.clone()
     }
 }
