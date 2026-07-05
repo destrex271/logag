@@ -324,22 +324,46 @@ mod test {
     use crate::global_config::GlobalConfig;
     use crate::shared_log::log::{LogContent, LogEvent};
     use crate::shared_log::traits::{Event, EventType};
+    use testcontainers::core::{IntoContainerPort, WaitFor};
+    use testcontainers::runners::AsyncRunner;
+    use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
-    // Helper function to create a test database connection string
-    fn get_test_connection_string() -> String {
-        "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string()
+    async fn setup_postgres_container() -> (ContainerAsync<GenericImage>, String) {
+        let container = GenericImage::new("pgvector/pgvector", "pg18")
+            .with_exposed_port(5432.tcp())
+            .with_wait_for(WaitFor::message_on_stdout(
+                "database system is ready to accept connections",
+            ))
+            .with_env_var("POSTGRES_USER", "testuser")
+            .with_env_var("POSTGRES_PASSWORD", "testpassword")
+            .with_env_var("POSTGRES_DB", "testdatabase")
+            .start()
+            .await
+            .expect("Failed to start Postgres container");
+
+        let port = container
+            .get_host_port_ipv4(5432.tcp())
+            .await
+            .expect("Failed to get host port");
+
+        let connection_string = format!("postgres://testuser:testpassword@127.0.0.1:{port}/testdatabase");
+
+        // Wait a moment for the pool to stabilize
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        (container, connection_string)
     }
 
     #[tokio::test]
     async fn test_postgres_storage_new() {
-        let conn_string = get_test_connection_string();
+        let conn_string = "postgres://testuser:testpassword@localhost:5432/testdatabase".to_string();
         let storage = PostgresStorage::new(conn_string);
         assert!(!storage.connection_string.is_empty());
     }
 
     #[tokio::test]
     async fn test_postgres_storage_store_and_retrieve_event() {
-        let conn_string = get_test_connection_string();
+        let (_container, conn_string) = setup_postgres_container().await;
         let storage = PostgresStorage::new(conn_string.clone());
         storage.run_migration().await.unwrap();
 
@@ -374,7 +398,7 @@ mod test {
 
     #[tokio::test]
     async fn test_postgres_storage_get_similar_user_input_embedding() {
-        let conn_string = get_test_connection_string();
+        let (_container, conn_string) = setup_postgres_container().await;
         let storage = PostgresStorage::new(conn_string.clone());
         storage.run_migration().await.unwrap();
 
@@ -387,14 +411,14 @@ mod test {
 
         storage.store_event(&user_event).await.unwrap();
 
-        let embedding: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        let embedding: Vec<f32> = (0..384).map(|i| i as f32 / 384.0).collect();
         let user_event_id = user_event.get_id();
         storage
             .store_user_input_embedding(user_event_id, &embedding)
             .await
             .unwrap();
 
-        let similar_embedding: Vec<f32> = vec![0.15, 0.25, 0.35, 0.45, 0.55];
+        let similar_embedding: Vec<f32> = (0..384).map(|i| (i as f32 + 0.5) / 384.0).collect();
         let result = storage
             .get_similar_user_input_embedding(similar_embedding)
             .await
@@ -406,7 +430,7 @@ mod test {
 
     #[tokio::test]
     async fn test_postgres_storage_get_agent_output_for_user_input() {
-        let conn_string = get_test_connection_string();
+        let (_container, conn_string) = setup_postgres_container().await;
         let storage = PostgresStorage::new(conn_string.clone());
         storage.run_migration().await.unwrap();
 
@@ -417,7 +441,8 @@ mod test {
             user_timestamp.clone(),
         );
 
-        let user_event_id = storage.store_event(&user_event).await.unwrap();
+        storage.store_event(&user_event).await.unwrap();
+        let user_event_id = user_event.get_id();
 
         let agent_timestamp = "2000000".to_string();
         let agent_event = LogEvent::new(
@@ -426,7 +451,8 @@ mod test {
             agent_timestamp.clone(),
         );
 
-        let agent_event_id = storage.store_event(&agent_event).await.unwrap();
+        storage.store_event(&agent_event).await.unwrap();
+        let agent_event_id = agent_event.get_id();
 
         storage
             .store_cached_agent_response(agent_event_id, user_event_id)

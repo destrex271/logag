@@ -1,4 +1,5 @@
 use crate::global_config::GlobalConfig;
+use crate::language_handler::service::LanguageService;
 use crate::shared_log::agent_recorder::AgentRecorder;
 use crate::shared_log::traits::{EventFactory, EventType, SharedLog};
 use rmcp::schemars::JsonSchema;
@@ -9,6 +10,7 @@ pub struct EventAggregator {
     event_factory: EventFactory,
     global_config: GlobalConfig,
     shared_log: std::sync::Arc<AgentRecorder>,
+    lang_service: LanguageService,
 }
 
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
@@ -25,6 +27,7 @@ impl Clone for EventAggregator {
             event_factory: EventFactory::new(),
             global_config: self.global_config.clone(),
             shared_log: self.shared_log.clone(),
+            lang_service: LanguageService::new(),
         }
     }
 }
@@ -38,6 +41,7 @@ impl EventAggregator {
             event_factory: EventFactory::new(),
             shared_log: recorder,
             global_config,
+            lang_service: LanguageService::new(),
         }
     }
 
@@ -51,7 +55,7 @@ impl EventAggregator {
             agent_notes,
         }): Parameters<MCPEvent>,
     ) -> String {
-        let formatted_content = self.format_content(&content);
+        let formatted_content = self.lang_service.format_content(&content);
         self.shared_log
             .append_event(self.event_factory.create_log_event(
                 formatted_content,
@@ -71,23 +75,17 @@ impl EventAggregator {
     ) -> String {
         self.shared_log.append_event_pair(
             self.event_factory.create_log_event(
-                self.format_content(&user_content),
+                self.lang_service.format_content(&user_content),
                 unix_epoch_timestamp.clone(),
                 EventType::UserInput,
             ),
             self.event_factory.create_log_event(
-                self.format_content(&agent_content),
+                self.lang_service.format_content(&agent_content),
                 unix_epoch_timestamp,
                 EventType::AgentOutput,
             ),
         );
         "success".to_string()
-    }
-
-    fn format_content(&self, content: &str) -> String{
-        // TODO(destrex271): Use NLP techniques like stemming etc to improve data quality.
-        let new_content = content.trim().to_lowercase();
-        new_content.to_string()
     }
 }
 
@@ -115,6 +113,7 @@ mod tests {
             event_factory: factory,
             global_config,
             shared_log: std::sync::Arc::new(recorder),
+            lang_service: LanguageService::new(),
         };
 
         let mcp_event = MCPEvent {
