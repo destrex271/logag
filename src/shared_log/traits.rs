@@ -24,7 +24,7 @@ pub trait SharedLog {
     fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid;
     fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
     fn find_similar_user_event(&self, user_input: Box<dyn Event>) -> Result<SlimUserEmbeddingInput, SharedLogErrors>;
-    fn fetch_ai_response_for_user_event(&self, user_input_id: uuid::Uuid) -> Result<CachedAgentResponse, SharedLogErrors>;
+    // fn fetch_ai_response_for_user_event(&self, user_input_id: uuid::Uuid) -> Result<CachedAgentResponse, SharedLogErrors>;
 }
 
 #[async_trait::async_trait]

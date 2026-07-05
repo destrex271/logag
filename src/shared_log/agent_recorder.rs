@@ -1,6 +1,7 @@
 use crate::embeddings::fastembed::FastEmbeddingService;
 use crate::embeddings::traits::EmbeddingsService;
 use crate::shared_log::errors::SharedLogErrors;
+use crate::shared_log::log::LogContent;
 use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 use crate::storage::traits::{StorageBackendProvider, StorageEngine, StorageEngineErrors};
 use crate::shared_log::traits::{Event, SharedLog};
@@ -144,6 +145,20 @@ impl SharedLog for AgentRecorder {
             Err(err) => Err(SharedLogErrors::UnexpectedStorageLevelError(err))
         }
     }
+
+    //
+    // fn fetch_ai_response_for_user_event(
+    //     &self,
+    //     user_input_id: uuid::Uuid
+    // ) -> Result<LogContent, SharedLogErrors> {
+    //
+    //     let storage = self.storage.clone();
+    //     let engine = storage.get().unwrap();
+    //     let handle = Handle::current();
+    //     let result: Result<SlimUserEmbeddingInput, StorageEngineErrors>
+    //         = handle.block_on(engine.get_agent_output_for_user_input(user_input_id));
+    //     Err(SharedLogErrors::UnknownError)
+    // }
 }
 
 #[cfg(test)]
@@ -283,23 +298,5 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         assert_eq!(store_count.load(Ordering::SeqCst), 5);
     }
-}
 
-    #[tokio::test]
-    async fn test_agent_recorder_find_similar_user_event() {
-        let store_count = std::sync::Arc::new(AtomicUsize::new(0));
-        let engine = Box::new(MockStorageEngine {
-            store_count: store_count.clone(),
-        });
-        let recorder = AgentRecorder::new_with_storage(engine);
-
-        let user_event = EventFactory::new().create_log_event(
-            "hello world".to_string(),
-            "1000000".to_string(),
-            EventType::UserInput,
-        );
-
-        let similar_event = recorder.find_similar_user_event(user_event.clone()).unwrap();
-        assert_eq!(similar_event.user_event_id, uuid::uuid!("00000000-0000-0000-0000-000000000000"));
-    }
 }

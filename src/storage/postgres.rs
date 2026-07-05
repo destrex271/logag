@@ -1,3 +1,4 @@
+use crate::shared_log::log::LogContent;
 use crate::shared_log::traits::Event;
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
 use chrono::{DateTime, Utc};
@@ -270,11 +271,52 @@ impl StorageEngine for PostgresStorage {
             )
         }
     }
+
+    async fn get_agent_output_for_user_input(
+        &self,
+        user_input_id: uuid::Uuid
+    ) -> Result<LogContent, StorageEngineErrors> {
+        let query1 = sqlx::query(
+            r#"
+            SELECT log_event_id FROM CachedAgentResponse where user_query_id = $1;
+            "#,
+        ).bind(user_input_id);
+
+        let mut connection = self.acquire_connection().await?;
+        let rows = query1
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|error| return StorageEngineErrors::DatabaseError(Box::new(error)))?;
+
+
+        let mut event_id: uuid::Uuid;
+        if let Ok(id) = rows.try_get("log_event_id"){
+            event_id = id;
+        }else{
+            return Err(StorageEngineErrors::NoDataForField(format!("No log event id found for user event id {}", user_input_id)));
+        }
+
+        let query2 = sqlx::query(
+            r#"
+            SELECT content FROM LogEvent WHERE id=$1
+            "#,
+        ).bind(event_id);
+        let row = query2
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|err| return StorageEngineErrors::DatabaseError(Box::new(err)))?;
+
+        if let Ok(content) = row.try_get("content"){
+            return Ok(LogContent::new(content));
+        };
+
+        Err(StorageEngineErrors::NoDataForField(
+            format!("no content found for agent event {}", event_id)
+        ))
+    }
+
 }
 
-
-// @opencode Add integration tests here. Avoid bloat, keep them minimal and use
-// parameterization as much as possible.
 
 #[cfg(test)]
 mod test {

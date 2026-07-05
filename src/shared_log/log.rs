@@ -37,7 +37,7 @@ impl Event for LogEvent {
 }
 
 impl LogContent {
-    fn new(content: String) -> Self {
+    pub fn new(content: String) -> Self {
         Self { content }
     }
 }
