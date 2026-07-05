@@ -73,58 +73,15 @@ Currently, Opencode support is merged in the repo. Other integrations follow the
 
 ### Opencode Integration
 
-[Opencode](https://opencode.ai) integration uses two MCP servers and an auto-recording plugin. The setup consists of two parts — recording sessions and retrieving cached responses.
-
-#### Opencode Configuration
-
-Register both MCP servers in `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "instructions": ["/path/to/logag/AGENTS.md"],
-  "mcp": {
-    "logag": {
-      "type": "remote",
-      "url": "http://127.0.0.1:8000/mcp"
-    },
-    "logag-read": {
-      "type": "remote",
-      "url": "http://127.0.0.1:8000/read_mcp"
-    }
-  }
-}
-```
-
-### AGENTS.md
-
-Point to an `AGENTS.md` file that instructs the agent to check the cache on every query. This is referenced by the `instructions` field in your opencode config:
-
-```
-For every user query, first call `get_cached_agent_response` from the `logag-read`
-MCP server to check if there is already cached knowledge around that prompt.
-If cached content exists and is relevant, use it to inform your response.
-```
-
-### Plugin (Auto-Recording)
-
-The [opencode plugin](js/opencode_plugin.js) hooks into chat events and automatically sends user/agent message pairs to the HTTP endpoint. Load it in your opencode config:
-
-```json
-{
-  "plugins": ["/path/to/logag/js/opencode_plugin.js"]
-}
-```
-
-The plugin listens for `chat.message` and `message.part.updated` events, buffers the conversation, and POSTs completed user/agent pairs to `http://localhost:8000/record`.
+See the dedicated guide at [docs/using_with_opencode.md](docs/using_with_opencode.md) for full setup instructions — configuring MCP servers, installing the auto-recording plugin, and the data flow.
 
 ### Extending to Other Tools
 
 To integrate another tool (Claude, Codex, etc.):
 
-1. **Record** — send user/agent message pairs to `POST /record` (HTTP)
-2. **Retrieve** — call the `logag-read` MCP tool `get_cached_agent_response` with the user's query text
-3. **Configure** — register the MCP endpoints in that tool's MCP client config
+1. **Record** — send user/agent pairs to `POST /record`
+2. **Retrieve** — call `get_cached_agent_response` via the `logag-read` MCP server
+3. **Configure** — register both MCP endpoints in that tool's MCP client config
 
 ### Data Flow
 
