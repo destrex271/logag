@@ -164,7 +164,7 @@ impl StorageEngine for PostgresStorage {
             WITH closest_matches AS (
                 SELECT user_event_id FROM UserInputEmbedding ORDER BY embedding <=> $1::vector ASC LIMIT 1
             )
-            SELECT * FROM closest_matches ORDER BY id DESC;
+            SELECT * FROM closest_matches ORDER BY user_event_id DESC;
             "#,
         )
         .bind(&embedding_as_vec);
