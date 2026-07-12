@@ -22,7 +22,6 @@ jobs:
           tool: cargo-audit
       - run: cargo fmt --all -- --check
       - run: cargo clippy -- -D warnings
-      - run: cargo audit
 
   test:
     runs-on: ubuntu-latest

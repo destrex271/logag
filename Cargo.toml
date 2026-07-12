@@ -28,5 +28,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.11", features = ["v4", "v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
+serial_test = "3"
 testcontainers = "0.27"
 tower = { version = "0.5", features = ["util"] }

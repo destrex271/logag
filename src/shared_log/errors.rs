@@ -6,7 +6,6 @@ pub enum SharedLogErrors {
     UnexpectedStorageLevelError(StorageEngineErrors),
     NoMatchingEntry(String),
     UnableToGenerateEmbeddings(String),
-    UnknownError,
 }
 
 impl fmt::Display for SharedLogErrors {
@@ -21,7 +20,6 @@ impl fmt::Display for SharedLogErrors {
             SharedLogErrors::UnableToGenerateEmbeddings(msg) => {
                 write!(f, "unable to generate embeddings: {}", msg)
             }
-            SharedLogErrors::UnknownError => write!(f, "unknown error"),
         }
     }
 }

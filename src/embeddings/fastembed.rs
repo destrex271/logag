@@ -24,7 +24,7 @@ impl EmbeddingsService for FastEmbeddingService {
 impl FastEmbeddingService {
     pub fn new() -> Result<FastEmbeddingService, String> {
         match TextEmbedding::try_new(Default::default()) {
-            Ok(model) => Ok(FastEmbeddingService { model: model }),
+            Ok(model) => Ok(FastEmbeddingService { model }),
             Err(err) => {
                 let msg = format!("unable to initialize model: {:?}", err);
                 tracing::error!(msg);
@@ -37,14 +37,17 @@ impl FastEmbeddingService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_new_success() {
         let service = FastEmbeddingService::new();
         assert!(service.is_ok());
     }
 
     #[test]
+    #[serial]
     fn test_generate_embeddings_single() {
         let mut service = FastEmbeddingService::new().unwrap();
         let result = service.generate_embeddings(vec!["Hello world".to_string()]);
@@ -55,6 +58,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_generate_embeddings_empty_input() {
         let mut service = FastEmbeddingService::new().unwrap();
         let result = service.generate_embeddings(vec![]);
@@ -63,6 +67,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_generate_embeddings_multiple_documents() {
         let mut service = FastEmbeddingService::new().unwrap();
         let result = service.generate_embeddings(vec![
@@ -79,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_embeddings_have_consistent_dimensions() {
         let mut service = FastEmbeddingService::new().unwrap();
         let result = service.generate_embeddings(vec!["First".to_string(), "Second".to_string()]);

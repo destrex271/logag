@@ -5,11 +5,11 @@ LogAg is an agentic memory optimization tool that records user–LLM interaction
 ## Features
 
 - [X] **Semantic caching** — stores user queries and agent responses, retrieves similar past interactions using vector embeddings (pgvector + fastembed)
-- [ ] **Agent continuity** — if an agent crashes mid-run, a new spawn resumes as if it were a clone of its predecessor
 - [X] **Dual protocol support** — serves via MCP (Model Context Protocol) and HTTP (Axum)
 - [X] **Pluggable backends** — storage and embedding services are trait-based for easy swapping
-- [ ]**Self-improving** — each loop leverages understanding developed in previous runs
 - [ ] **Pluggable Storage Backends**: Currently supports only PostgreSQL. Support for Duckdb upcoming.
+- [ ] **Self-improving** — each loop leverages understanding developed in previous runs
+- [ ] **Agent continuity** — if an agent crashes mid-run, a new spawn resumes as if it were a clone of its predecessor
 
 ## Architecture
 
@@ -33,7 +33,7 @@ flowchart LR
 
 - Rust 2024 edition (`rustc` ≥ 1.85)
 - PostgreSQL 16+ with the `pgvector` extension
-- Docker (optional, for local Postgres)
+- Podman/Docker (optional, for local Postgres)
 
 ### 1. Start PostgreSQL with pgvector
 
