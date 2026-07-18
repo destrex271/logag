@@ -1,0 +1,16 @@
+{
+  "description": "Store Session data hooks",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/store_turn.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
