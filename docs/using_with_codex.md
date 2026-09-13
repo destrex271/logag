@@ -74,35 +74,38 @@ cp integrations/codex/hooks/store_turn.py ~/.codex/hooks/store_turn.py
 chmod +x ~/.codex/hooks/store_turn.py
 ```
 
-**Trust the hook:** Codex skips hook commands it has not reviewed yet. Run `/hooks` inside a Codex session, review the `store_turn.py` definition, and trust it. The hook then fires automatically when a turn stops.
+**Trust the hooks:** Codex skips hook commands it has not reviewed yet. Run `/hooks` inside a Codex session, review the `store_turn.py` definitions (one per event: `UserPromptSubmit` and `Stop`), and trust them. The hooks then fire automatically as you chat.
 
 Hooks are enabled by default. If `~/.codex/config.toml` already contains `[features] hooks = false`, remove it (or set it to `true`) so the hook can run.
 
-## How the Hook Works
+## How the Hooks Work
 
-Codex pipes one JSON object to the hook command on stdin. The hook uses two fields:
+Two Codex lifecycle hooks drive the integration (see `hooks.json`):
 
-| Field | Description |
-|-------|-------------|
-| `transcript_path` | Path to the session rollout (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) |
-| `last_assistant_message` | The last assistant message text of the turn |
+| Event | Fires | What the hook does |
+|-------|-------|--------------------|
+| `UserPromptSubmit` | Right before a user prompt is sent | Stores `{session_id, turn_id, prompt}` in a temp state file (`<tempdir>/logag/`) |
+| `Stop` | When a turn completes | Reads the stored prompt, pairs it with `last_assistant_message`, POSTs the pair to `http://localhost:8000/record`, then removes the state file |
 
-The hook reads the first real user message from the transcript roll-out and POSTs the pair to `http://localhost:8000/record`:
+The recorded payload looks like:
 
 ```json
 { "userInput": "...", "agentOutput": "..." }
 ```
 
-If LogAg is offline the hook logs nothing and exits silently, so it never interrupts a Codex turn.
+State is keyed by `session_id` + `turn_id`, so concurrent sessions and turns never collide. If a turn is interrupted before `Stop` runs, a small stale state file may remain in the temp dir — it is harmless and never affects later turns.
+
+Both hooks are fail-open: if LogAg is offline or the state file is missing, the hook exits silently without interrupting the Codex turn.
 
 ## Data Flow
 
 ```
 Codex session
     │
-    ├─ Stop hook fires when a turn completes
-    │  └─ store_turn.py reads transcript_path + last_assistant_message
-    │     └─ POST /record ─→ LogAg stores as LogEvent + embedding
+    ├─ UserPromptSubmit hook stores the user prompt
+    │
+    ├─ Stop hook pairs prompt + last_assistant_message
+    │  └─ POST /record ─→ LogAg stores as LogEvent + embedding
     │
     └─ Codex reads AGENTS.md
        └─ Calls logag-read_get_cached_agent_response(text)

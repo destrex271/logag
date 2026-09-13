@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
-"""Record a finished Codex turn into LogAg via ``POST /record``.
+"""Record Codex turns into LogAg via Codex lifecycle hooks.
 
-This script is installed as a Codex ``Stop`` hook (see ``hooks.json``).
-When a turn completes, Codex pipes one JSON object on stdin containing at
-least:
+Two hooks drive this script (see ``hooks.json``):
 
-* ``transcript_path`` - path to the session rollout (JSONL) file, and
-* ``last_assistant_message`` - the last assistant message text.
+* ``UserPromptSubmit`` - fires right before a user prompt is sent. The
+  script stores ``{session_id, turn_id, prompt}`` in a temp file so the
+  matching ``Stop`` event can pair the prompt with the assistant's answer.
 
-The script extracts the user prompt of the finished turn from the transcript
-and posts the user/agent pair to LogAg so it is stored as a LogEvent with its
-embedding. Failures are swallowed: a LogAg outage must never interrupt or
-block a Codex turn.
+* ``Stop`` - fires when a turn completes. The script reads the stored
+  prompt, pairs it with ``last_assistant_message``, POSTs the pair to
+  LogAg's ``/record`` endpoint, and removes the temp file.
+
+State files live in ``<tempdir>/logag/`` and are keyed by ``session_id``
+and ``turn_id`` so concurrent sessions and turns never collide. Failures
+are swallowed: a LogAg outage or a missing state file must never interrupt
+or block a Codex turn.
 """
 
 import json
+import os
 import sys
-from typing import Any, Iterable
+import tempfile
+from pathlib import Path
+from typing import Any
 from urllib.request import Request, urlopen
 
 LOGAG_URL = "http://localhost:8000/record"
+
+STATE_DIR = Path(tempfile.gettempdir()) / "logag"
 
 
 class EventDispatcher:
@@ -43,76 +51,58 @@ class EventDispatcher:
         return json.loads(body) if body else {}
 
 
-class TranscriptReader:
-    """Extracts the turn's user prompt from a Codex rollout transcript.
+def _state_file(session_id: str, turn_id: str) -> Path:
+    return STATE_DIR / f"{session_id}_{turn_id}.json"
 
-    A rollout is a JSONL file where user/assistant turns are recorded as
-    ``response_item`` entries whose ``payload`` looks like::
 
-        {"type": "message", "role": "user",
-         "content": [{"type": "input_text", "text": "..."}]}
+def handle_user_prompt_submit(payload: dict[str, Any]) -> None:
+    session_id = payload.get("session_id")
+    turn_id = payload.get("turn_id")
+    prompt = payload.get("prompt")
+    if not session_id or not turn_id or not prompt:
+        return
 
-    Codex also injects synthetic ``<...>``-wrapped user blocks (plugin
-    suggestions, continuation banners, etc.); those are not real prompts and
-    are skipped.
-    """
+    STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = _state_file(session_id, turn_id)
+    path.write_text(
+        json.dumps({"session_id": session_id, "turn_id": turn_id, "prompt": prompt}),
+        encoding="utf-8",
+    )
+    os.chmod(path, 0o600)
 
-    @staticmethod
-    def _payload(jsonl_entry: str) -> dict[str, Any]:
-        return json.loads(jsonl_entry).get("payload", {})
 
-    @staticmethod
-    def _entry_text(jsonl_entry: str) -> str:
-        content = TranscriptReader._payload(jsonl_entry).get("content", [])
-        if not isinstance(content, list):
-            return ""
-        return "\n".join(
-            entry.get("text", "")
-            for entry in content
-            if isinstance(entry, dict) and entry.get("text")
-        )
+def handle_stop(payload: dict[str, Any]) -> None:
+    session_id = payload.get("session_id")
+    turn_id = payload.get("turn_id")
+    last_assistant_message = payload.get("last_assistant_message")
+    if not session_id or not turn_id or not last_assistant_message:
+        return
 
-    @staticmethod
-    def _is_synthetic(text: str) -> bool:
-        stripped = text.strip()
-        return stripped.startswith("<") and stripped.endswith(">")
+    path = _state_file(session_id, turn_id)
+    if not path.is_file():
+        return
 
-    def fetch_transcript(self, file_path: str) -> Iterable[str]:
-        with open(file_path, encoding="utf-8") as file:
-            for line in file:
-                line = line.strip()
-                if line:
-                    yield line
+    try:
+        user_input = json.loads(path.read_text(encoding="utf-8")).get("prompt", "")
+    finally:
+        path.unlink(missing_ok=True)
 
-    def get_user_input(self, file_path: str) -> str:
-        user_input = ""
-        for line in self.fetch_transcript(file_path):
-            payload = self._payload(line)
-            if payload.get("type") != "message" or payload.get("role") != "user":
-                continue
+    if not user_input:
+        return
 
-            text = self._entry_text(line)
-            if text and not self._is_synthetic(text):
-                user_input = text
-
-        return user_input
+    EventDispatcher().send_turn_data(user_input, last_assistant_message)
 
 
 def main(raw_payload: str) -> None:
     try:
         payload = json.loads(raw_payload)
-        transcript_path = payload.get("transcript_path")
-        last_assistant_message = payload.get("last_assistant_message")
-        if not transcript_path or not last_assistant_message:
-            return
-
-        user_input = TranscriptReader().get_user_input(transcript_path)
-        if not user_input:
-            return
-
-        EventDispatcher().send_turn_data(user_input, last_assistant_message)
+        event = payload.get("hook_event_name")
+        if event == "UserPromptSubmit":
+            handle_user_prompt_submit(payload)
+        elif event == "Stop":
+            handle_stop(payload)
     except Exception:
-        # Fail open: a missing/offline LogAg must not affect the Codex turn.
+        # Fail open: a hook failure or LogAg outage must not affect the turn.
         return
 
 

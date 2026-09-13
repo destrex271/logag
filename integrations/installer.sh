@@ -39,7 +39,7 @@ function install_for_codex() {
     chmod +x "$CODEX_HOOKS_DIR/hooks/store_turn.py"
 
     echo "Installed hooks for logag."
-    echo "Next step: run \`/hooks\` inside Codex and trust the store_turn.py hook so it is allowed to run."
+    echo "Next step: run \`/hooks\` inside Codex and trust the store_turn.py hooks so they are allowed to run."
 }
 
 function install_for_claude() {

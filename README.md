@@ -77,7 +77,7 @@ See the dedicated guide at [docs/using_with_opencode.md](docs/using_with_opencod
 
 ### Codex Integration
 
-See the dedicated guide at [docs/using_with_codex.md](docs/using_with_codex.md) for full setup instructions — configuring MCP servers, installing the auto-recording `Stop` hook (via `bash integrations/installer.sh` or manually), and the data flow.
+See the dedicated guide at [docs/using_with_codex.md](docs/using_with_codex.md) for full setup instructions — configuring MCP servers, installing the auto-recording hooks (`UserPromptSubmit` + `Stop`, via `bash integrations/installer.sh` or manually), and the data flow.
 
 ### Extending to Other Tools
 
@@ -93,7 +93,7 @@ To integrate another tool (Claude, etc.):
 Opencode / Codex session
     │
     ├─ Harness captures user input + agent output
-    │  (Opencode plugin / Codex Stop hook)
+    │  (Opencode plugin / Codex hooks)
     │  └─ POST /record ─→ LogAg stores as LogEvent + embedding
     │
     └─ Agent reads AGENTS.md
