@@ -1,7 +1,8 @@
 
 # ------ Constants ------
-HARNESS_SELECTION_PORMPT="Select the harness to install `logag` for:"
-SUPPORTED_HARNESSES=("codex","opencode","claude")
+HARNESS_SELECTION_PORMPT="Select the harness to install \`logag\` for:";
+
+SUPPORTED_HARNESSES=("opencode" "codex" "claude");
 # -----------------------
 
 
