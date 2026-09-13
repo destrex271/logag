@@ -1,0 +1,17 @@
+{
+  "description": "Record Codex turns into LogAg",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/hooks/store_turn.py\"",
+            "timeout": 30,
+            "statusMessage": "Recording turn to LogAg"
+          }
+        ]
+      }
+    ]
+  }
+}
