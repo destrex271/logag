@@ -46,8 +46,23 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
         FakeDispatcher.calls = []
 
+    def state_files(self, session_id, turn_id):
+        """Pending state files for a session/turn, oldest first."""
+        return sorted(
+            (
+                path
+                for path in self.state_dir.glob(f"{session_id}_{turn_id}_*.json")
+                if path.is_file()
+            ),
+            key=lambda path: path.stat().st_mtime_ns,
+        )
+
     def state_file(self, session_id, turn_id):
-        return self.state_dir / f"{session_id}_{turn_id}.json"
+        """Newest pending state file, or a non-existent placeholder path."""
+        files = self.state_files(session_id, turn_id)
+        if files:
+            return files[-1]
+        return self.state_dir / f"{session_id}_{turn_id}_empty.json"
 
     def stop_payload(self, session_id, turn_id, last_assistant_message="answer"):
         return {
@@ -57,6 +72,16 @@ class StoreTurnBehaviorTest(unittest.TestCase):
             "last_assistant_message": last_assistant_message,
         }
 
+    def seed_state(self, session_id, turn_id, prompt="p"):
+        """Write a pending state file as a UserPromptSubmit would have."""
+        self.state_dir.mkdir(parents=True)
+        path = self.state_dir / f"{session_id}_{turn_id}_seed.json"
+        path.write_text(
+            json.dumps({"session_id": session_id, "turn_id": turn_id, "prompt": prompt}),
+            encoding="utf-8",
+        )
+        return path
+
     def test_user_prompt_submit_writes_state_file(self):
         store_turn.handle_user_prompt_submit({
             "hook_event_name": "UserPromptSubmit",
@@ -65,18 +90,22 @@ class StoreTurnBehaviorTest(unittest.TestCase):
             "prompt": "Help me debug the auth panic",
         })
 
-        path = self.state_file("sess-1", "turn-1")
-        self.assertTrue(path.is_file())
+        path = self.state_files("sess-1", "turn-1")
+        self.assertEqual(len(path), 1)
+        self.assertTrue(path[0].is_file())
+        # Every submission gets a UUID-tagged name so concurrent agents
+        # sharing this session/turn never collide on the same file.
+        self.assertRegex(path[0].name, r"^sess-1_turn-1_[0-9a-f]{32}\.json$")
         self.assertEqual(
-            json.loads(path.read_text(encoding="utf-8")),
+            json.loads(path[0].read_text(encoding="utf-8")),
             {"session_id": "sess-1", "turn_id": "turn-1", "prompt": "Help me debug the auth panic"},
         )
         # State files can hold sensitive prompts: the file is owner-only
         # and the state dir is not group/world accessible.
-        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(path[0]).st_mode & 0o777, 0o600)
         self.assertEqual(os.stat(self.state_dir).st_mode & 0o700, 0o700)
 
-    def test_user_prompt_submit_overwrites_existing_state(self):
+    def test_user_prompt_submit_creates_distinct_file_per_submission(self):
         self.state_dir.mkdir(parents=True)
         self.state_file("sess-1", "turn-1").write_text(
             json.dumps({"session_id": "sess-1", "turn_id": "turn-1", "prompt": "old"}),
@@ -85,10 +114,10 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         store_turn.handle_user_prompt_submit(
             {"session_id": "sess-1", "turn_id": "turn-1", "prompt": "new"}
         )
-        self.assertEqual(
-            json.loads(self.state_file("sess-1", "turn-1").read_text(encoding="utf-8"))["prompt"],
-            "new",
-        )
+
+        files = self.state_files("sess-1", "turn-1")
+        self.assertEqual(len(files), 2)  # nothing was overwritten
+        self.assertEqual(json.loads(files[-1].read_text(encoding="utf-8"))["prompt"], "new")
 
     def test_user_prompt_submit_skips_incomplete_payloads(self):
         for payload in (
@@ -104,11 +133,7 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         self.assertFalse(self.state_dir.exists())
 
     def test_stop_pairs_stored_prompt_with_answer_and_cleans_up(self):
-        self.state_dir.mkdir(parents=True)
-        self.state_file("sess-1", "turn-1").write_text(
-            json.dumps({"session_id": "sess-1", "turn_id": "turn-1", "prompt": "Why is it slow?"}),
-            encoding="utf-8",
-        )
+        self.seed_state("sess-1", "turn-1", "Why is it slow?")
 
         with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
             store_turn.handle_stop(self.stop_payload("sess-1", "turn-1", "Because of N+1 queries"))
@@ -124,11 +149,7 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         self.assertFalse(self.state_dir.exists())
 
     def test_stop_skips_when_payload_incomplete(self):
-        self.state_dir.mkdir(parents=True)
-        self.state_file("sess-1", "turn-1").write_text(
-            json.dumps({"session_id": "sess-1", "turn_id": "turn-1", "prompt": "p"}),
-            encoding="utf-8",
-        )
+        self.seed_state("sess-1", "turn-1")
 
         with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
             store_turn.handle_stop({"session_id": "sess-1", "turn_id": "turn-1"})          # no answer
@@ -149,10 +170,9 @@ class StoreTurnBehaviorTest(unittest.TestCase):
                 {"session_id": session, "turn_id": turn, "prompt": prompt}
             )
 
-        self.assertEqual(
-            sorted(p.name for p in self.state_dir.iterdir()),
-            ["sess-A_turn-1.json", "sess-A_turn-2.json", "sess-B_turn-1.json"],
-        )
+        self.assertEqual(len(self.state_files("sess-A", "turn-1")), 1)
+        self.assertEqual(len(self.state_files("sess-B", "turn-1")), 1)
+        self.assertEqual(len(self.state_files("sess-A", "turn-2")), 1)
 
         with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
             store_turn.handle_stop(self.stop_payload("sess-A", "turn-2", "answer A2"))
@@ -163,6 +183,32 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         self.assertFalse(self.state_file("sess-B", "turn-1").exists())
         # The un-answered turn's prompt is preserved.
         self.assertTrue(self.state_file("sess-A", "turn-1").exists())
+
+    def test_multiple_agents_on_same_session_turn_do_not_overwrite(self):
+        # Two agents mid-turn on the same session/turn: each gets its own
+        # UUID-tagged file, so neither prompt clobbers the other.
+        store_turn.handle_user_prompt_submit(
+            {"session_id": "sess-1", "turn_id": "turn-1", "prompt": "agenta prompt"}
+        )
+        store_turn.handle_user_prompt_submit(
+            {"session_id": "sess-1", "turn_id": "turn-1", "prompt": "agentb prompt"}
+        )
+
+        files = self.state_files("sess-1", "turn-1")
+        self.assertEqual(len(files), 2)
+        self.assertNotEqual(files[0].name, files[1].name)
+
+        # Each Stop consumes one pending prompt (newest first); neither
+        # agent's prompt is lost.
+        with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
+            store_turn.handle_stop(self.stop_payload("sess-1", "turn-1", "answer B"))
+            store_turn.handle_stop(self.stop_payload("sess-1", "turn-1", "answer A"))
+
+        self.assertEqual(
+            FakeDispatcher.calls,
+            [("agentb prompt", "answer B"), ("agenta prompt", "answer A")],
+        )
+        self.assertEqual(self.state_files("sess-1", "turn-1"), [])
 
     def test_main_dispatches_on_hook_event_name(self):
         with mock.patch.object(store_turn, "handle_user_prompt_submit") as user_hook, \
@@ -190,11 +236,7 @@ class StoreTurnBehaviorTest(unittest.TestCase):
                 store_turn.main(raw)  # must not raise
 
     def test_main_fails_open_on_dispatcher_error(self):
-        self.state_dir.mkdir(parents=True)
-        self.state_file("sess-1", "turn-1").write_text(
-            json.dumps({"session_id": "sess-1", "turn_id": "turn-1", "prompt": "p"}),
-            encoding="utf-8",
-        )
+        self.seed_state("sess-1", "turn-1")
 
         class OfflineDispatcher:
             def __init__(self, url=None):
@@ -212,7 +254,7 @@ class StoreTurnBehaviorTest(unittest.TestCase):
 
     def test_corrupt_state_file_fails_open_and_is_cleaned(self):
         self.state_dir.mkdir(parents=True)
-        self.state_file("sess-1", "turn-1").write_text("{not json", encoding="utf-8")
+        (self.state_dir / "sess-1_turn-1_corrupt.json").write_text("{not json", encoding="utf-8")
 
         with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
             store_turn.main(json.dumps(self.stop_payload("sess-1", "turn-1")))

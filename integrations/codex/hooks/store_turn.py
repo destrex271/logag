@@ -11,16 +11,19 @@ Two hooks drive this script (see ``hooks.json``):
   prompt, pairs it with ``last_assistant_message``, POSTs the pair to
   LogAg's ``/record`` endpoint, and removes the temp file.
 
-State files live in ``<tempdir>/logag/`` and are keyed by ``session_id``
-and ``turn_id`` so concurrent sessions and turns never collide. Failures
-are swallowed: a LogAg outage or a missing state file must never interrupt
-or block a Codex turn.
+State files live in ``<tempdir>/logag/``. Each one is tagged with a
+random UUID (``{session_id}_{turn_id}_{uuid}.json``), so multiple agents
+or processes using the plugin at once never overwrite each other's
+pending prompts. ``Stop`` consumes the newest pending file for its
+session/turn. Failures are swallowed: a LogAg outage or a missing state
+file must never interrupt or block a Codex turn.
 """
 
 import json
 import os
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
@@ -51,8 +54,23 @@ class EventDispatcher:
         return json.loads(body) if body else {}
 
 
-def _state_file(session_id: str, turn_id: str) -> Path:
-    return STATE_DIR / f"{session_id}_{turn_id}.json"
+def _pending_state_files(session_id: str, turn_id: str) -> list[Path]:
+    """Pending state files for a session/turn, newest first.
+
+    Each UserPromptSubmit writes a uniquely named file, so several agents
+    can be mid-turn on the same session/turn without overwriting each
+    other. Stop consumes the newest pending prompt; the others stay for
+    their own Stop events.
+    """
+    return sorted(
+        (
+            path
+            for path in STATE_DIR.glob(f"{session_id}_{turn_id}_*.json")
+            if path.is_file()
+        ),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
 
 
 def handle_user_prompt_submit(payload: dict[str, Any]) -> None:
@@ -63,7 +81,9 @@ def handle_user_prompt_submit(payload: dict[str, Any]) -> None:
         return
 
     STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path = _state_file(session_id, turn_id)
+    # Unique per submission: concurrent agents sharing this session/turn
+    # never collide on the same file.
+    path = STATE_DIR / f"{session_id}_{turn_id}_{uuid.uuid4().hex}.json"
     path.write_text(
         json.dumps({"session_id": session_id, "turn_id": turn_id, "prompt": prompt}),
         encoding="utf-8",
@@ -78,10 +98,11 @@ def handle_stop(payload: dict[str, Any]) -> None:
     if not session_id or not turn_id or not last_assistant_message:
         return
 
-    path = _state_file(session_id, turn_id)
-    if not path.is_file():
+    pending = _pending_state_files(session_id, turn_id)
+    if not pending:
         return
 
+    path = pending[0]
     try:
         user_input = json.loads(path.read_text(encoding="utf-8")).get("prompt", "")
     finally:

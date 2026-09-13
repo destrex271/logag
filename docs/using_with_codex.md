@@ -93,7 +93,7 @@ The recorded payload looks like:
 { "userInput": "...", "agentOutput": "..." }
 ```
 
-State is keyed by `session_id` + `turn_id`, so concurrent sessions and turns never collide. If a turn is interrupted before `Stop` runs, a small stale state file may remain in the temp dir — it is harmless and never affects later turns.
+Each state file is tagged with a random UUID (`{session_id}_{turn_id}_{uuid}.json`): if multiple agents are using the plugin at once, their pending prompts never overwrite each other. `Stop` consumes the newest pending file for its session/turn; if a turn is interrupted before `Stop` runs, a small stale state file may remain in the temp dir — it is harmless and never affects later turns.
 
 Both hooks are fail-open: if LogAg is offline or the state file is missing, the hook exits silently without interrupting the Codex turn.
 
