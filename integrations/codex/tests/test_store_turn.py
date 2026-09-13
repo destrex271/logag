@@ -119,17 +119,34 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         self.assertEqual(len(files), 2)  # nothing was overwritten
         self.assertEqual(json.loads(files[-1].read_text(encoding="utf-8"))["prompt"], "new")
 
-    def test_user_prompt_submit_skips_incomplete_payloads(self):
-        for payload in (
-            {"session_id": "s", "turn_id": "t"},                       # no prompt
-            {"session_id": "s", "prompt": "p"},                        # no turn_id
-            {"turn_id": "t", "prompt": "p"},                           # no session_id
-            {"session_id": "", "turn_id": "t", "prompt": "p"},         # empty session_id
-            {"session_id": "s", "turn_id": "", "prompt": "p"},         # empty turn_id
-            {"session_id": "s", "turn_id": "t", "prompt": ""},         # empty prompt
-        ):
-            with self.subTest(payload=payload):
-                store_turn.handle_user_prompt_submit(payload)
+    def test_user_prompt_submit_skips_when_prompt_missing(self):
+        store_turn.handle_user_prompt_submit({"session_id": "s", "turn_id": "t"})
+        self.assertFalse(self.state_dir.exists())
+
+    def test_user_prompt_submit_skips_when_turn_id_missing(self):
+        store_turn.handle_user_prompt_submit({"session_id": "s", "prompt": "p"})
+        self.assertFalse(self.state_dir.exists())
+
+    def test_user_prompt_submit_skips_when_session_id_missing(self):
+        store_turn.handle_user_prompt_submit({"turn_id": "t", "prompt": "p"})
+        self.assertFalse(self.state_dir.exists())
+
+    def test_user_prompt_submit_skips_when_session_id_empty(self):
+        store_turn.handle_user_prompt_submit(
+            {"session_id": "", "turn_id": "t", "prompt": "p"}
+        )
+        self.assertFalse(self.state_dir.exists())
+
+    def test_user_prompt_submit_skips_when_turn_id_empty(self):
+        store_turn.handle_user_prompt_submit(
+            {"session_id": "s", "turn_id": "", "prompt": "p"}
+        )
+        self.assertFalse(self.state_dir.exists())
+
+    def test_user_prompt_submit_skips_when_prompt_empty(self):
+        store_turn.handle_user_prompt_submit(
+            {"session_id": "s", "turn_id": "t", "prompt": ""}
+        )
         self.assertFalse(self.state_dir.exists())
 
     def test_stop_pairs_stored_prompt_with_answer_and_cleans_up(self):
@@ -148,16 +165,32 @@ class StoreTurnBehaviorTest(unittest.TestCase):
         self.assertEqual(FakeDispatcher.calls, [])
         self.assertFalse(self.state_dir.exists())
 
-    def test_stop_skips_when_payload_incomplete(self):
+    def test_stop_skips_when_answer_missing(self):
         self.seed_state("sess-1", "turn-1")
 
         with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
-            store_turn.handle_stop({"session_id": "sess-1", "turn_id": "turn-1"})          # no answer
-            store_turn.handle_stop({"session_id": "sess-1", "last_assistant_message": "a"})  # no turn_id
-            store_turn.handle_stop({"turn_id": "turn-1", "last_assistant_message": "a"})     # no session_id
+            store_turn.handle_stop({"session_id": "sess-1", "turn_id": "turn-1"})
 
         self.assertEqual(FakeDispatcher.calls, [])
-        # Early returns leave the state file in place for a later Stop.
+        # Early return leaves the state file in place for a later Stop.
+        self.assertTrue(self.state_file("sess-1", "turn-1").exists())
+
+    def test_stop_skips_when_turn_id_missing(self):
+        self.seed_state("sess-1", "turn-1")
+
+        with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
+            store_turn.handle_stop({"session_id": "sess-1", "last_assistant_message": "a"})
+
+        self.assertEqual(FakeDispatcher.calls, [])
+        self.assertTrue(self.state_file("sess-1", "turn-1").exists())
+
+    def test_stop_skips_when_session_id_missing(self):
+        self.seed_state("sess-1", "turn-1")
+
+        with mock.patch.object(store_turn, "EventDispatcher", FakeDispatcher):
+            store_turn.handle_stop({"turn_id": "turn-1", "last_assistant_message": "a"})
+
+        self.assertEqual(FakeDispatcher.calls, [])
         self.assertTrue(self.state_file("sess-1", "turn-1").exists())
 
     def test_concurrent_sessions_and_turns_do_not_collide(self):
@@ -230,10 +263,17 @@ class StoreTurnBehaviorTest(unittest.TestCase):
             {"hook_event_name": "Stop", "session_id": "s", "turn_id": "t", "last_assistant_message": "a"}
         )
 
-    def test_main_swallows_malformed_input(self):
-        for raw in ("this is not json", "", "42", '{"hook_event_name":}'):
-            with self.subTest(raw=raw):
-                store_turn.main(raw)  # must not raise
+    def test_main_swallows_non_json_stdin(self):
+        store_turn.main("this is not json")  # must not raise
+
+    def test_main_swallows_empty_stdin(self):
+        store_turn.main("")  # must not raise
+
+    def test_main_swallows_scalar_json_stdin(self):
+        store_turn.main("42")  # must not raise
+
+    def test_main_swallows_malformed_json_stdin(self):
+        store_turn.main('{"hook_event_name":}')  # must not raise
 
     def test_main_fails_open_on_dispatcher_error(self):
         self.seed_state("sess-1", "turn-1")
