@@ -69,15 +69,19 @@ The server starts with both an MCP endpoint and an HTTP API.
 
 LogAg acts as a **central memory store** across AI tools — Claude, Opencode, Codex, or any MCP/HTTP-compatible client. Record interactions from one tool and retrieve context from another.
 
-Currently, Opencode support is merged in the repo. Other integrations follow the same pattern.
+Currently, Opencode and Codex support are merged in the repo. Other integrations follow the same pattern.
 
 ### Opencode Integration
 
-See the dedicated guide at [docs/using_with_opencode.md](docs/using_with_opencode.md) for full setup instructions — configuring MCP servers, installing the auto-recording plugin (via `bash js/installer.sh` or manually), and the data flow.
+See the dedicated guide at [docs/using_with_opencode.md](docs/using_with_opencode.md) for full setup instructions — configuring MCP servers, installing the auto-recording plugin (via `bash integrations/installer.sh` or manually), and the data flow.
+
+### Codex Integration
+
+See the dedicated guide at [docs/using_with_codex.md](docs/using_with_codex.md) for full setup instructions — configuring MCP servers, installing the auto-recording hooks (`UserPromptSubmit` + `Stop`, via `bash integrations/installer.sh` or manually), and the data flow.
 
 ### Extending to Other Tools
 
-To integrate another tool (Claude, Codex, etc.):
+To integrate another tool (Claude, etc.):
 
 1. **Record** — send user/agent pairs to `POST /record`
 2. **Retrieve** — call `get_cached_agent_response` via the `logag-read` MCP server
@@ -86,9 +90,10 @@ To integrate another tool (Claude, Codex, etc.):
 ### Data Flow
 
 ```
-Opencode session
+Opencode / Codex session
     │
-    ├─ Plugin captures user input + agent output
+    ├─ Harness captures user input + agent output
+    │  (Opencode plugin / Codex hooks)
     │  └─ POST /record ─→ LogAg stores as LogEvent + embedding
     │
     └─ Agent reads AGENTS.md

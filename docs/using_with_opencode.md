@@ -57,12 +57,12 @@ If cached content exists and is relevant, use it to inform your response.
 
 ### 4. Install the Auto-Recording Plugin
 
-The [opencode plugin](../js/opencode_plugin.js) hooks into chat events and automatically sends user/agent message pairs to `POST /record`.
+The [opencode plugin](../integrations/opencode/opencode_plugin.ts) hooks into chat events and automatically sends user/agent message pairs to `POST /record`.
 
 **Option A — Install script:**
 
 ```bash
-bash js/installer.sh
+bash integrations/installer.sh
 ```
 
 This copies the plugin to `~/.opencode/plugins/forward.ts`.
@@ -73,7 +73,7 @@ Add it to your `opencode.json`:
 
 ```json
 {
-  "plugins": ["/path/to/logag/js/opencode_plugin.js"]
+  "plugins": ["/path/to/logag/integrations/opencode/opencode_plugin.ts"]
 }
 ```
 
