@@ -21,8 +21,11 @@ impl LanguageService {
     }
 
     pub fn is_input_valueable(&self, content: &str) -> bool {
+        let formatted_content = self.format_content(content);
         // This is naive and NOT AT ALL A GOOD CHECK.
-        if content.len() == 0 || self.split_tokens(content).len() as isize > TOKEN_COUNT_THRESHOLD {
+        if formatted_content.len() == 0
+            || self.split_tokens(&formatted_content).len() as isize > TOKEN_COUNT_THRESHOLD
+        {
             return false;
         }
         true
@@ -46,5 +49,24 @@ impl Default for LanguageService {
 impl Clone for LanguageService {
     fn clone(&self) -> Self {
         LanguageService::new()
+    }
+}
+
+mod tests {
+    #[test]
+    fn test_is_input_valueable() {
+        let service = LanguageService::new();
+        assert!(!service.is_input_valueable(""));
+        assert!(
+            !service.is_input_valueable("a ".repeat(TOKEN_COUNT_THRESHOLD as usize + 1).as_str())
+        );
+        assert!(service.is_input_valueable("a ".repeat(TOKEN_COUNT_THRESHOLD as usize).as_str()));
+    }
+
+    #[test]
+    fn test_format_content() {
+        let service = LanguageService::new();
+        assert_eq!(service.format_content("  Hello, World!  "), "hello, world!");
+        assert_eq!(service.format_content(""), "");
     }
 }
