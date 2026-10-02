@@ -22,7 +22,7 @@ impl LanguageService {
     pub fn is_input_valueable(&self, content: &str) -> bool {
         let formatted_content = self.format_content(content);
         // This is naive and NOT AT ALL A GOOD CHECK.
-        if formatted_content.len() == 0
+        if formatted_content.is_empty()
             || self.split_tokens(&formatted_content).len() as isize > TOKEN_COUNT_THRESHOLD
         {
             return false;
@@ -31,12 +31,12 @@ impl LanguageService {
     }
 
     fn split_tokens(&self, content: &str) -> Vec<String> {
-        return self
+        self
             .word_split_regex
             .split(content)
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
     }
 }
 
@@ -53,7 +53,7 @@ impl Clone for LanguageService {
 }
 
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn test_is_input_valueable() {
