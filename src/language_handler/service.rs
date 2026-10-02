@@ -31,8 +31,7 @@ impl LanguageService {
     }
 
     fn split_tokens(&self, content: &str) -> Vec<String> {
-        self
-            .word_split_regex
+        self.word_split_regex
             .split(content)
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
@@ -53,10 +52,9 @@ impl Clone for LanguageService {
 }
 
 mod tests {
-    
-
     #[test]
     fn test_is_input_valueable() {
+        use super::LanguageService;
         let service = LanguageService::new();
         assert!(!service.is_input_valueable(""));
         assert!(
@@ -67,6 +65,7 @@ mod tests {
 
     #[test]
     fn test_format_content() {
+        use super::LanguageService;
         let service = LanguageService::new();
         assert_eq!(service.format_content("  Hello, World!  "), "hello, world!");
         assert_eq!(service.format_content(""), "");
