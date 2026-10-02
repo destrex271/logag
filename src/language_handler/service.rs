@@ -51,10 +51,11 @@ impl Clone for LanguageService {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn test_is_input_valueable() {
-        use super::LanguageService;
+        use super::{LanguageService, TOKEN_COUNT_THRESHOLD};
         let service = LanguageService::new();
         assert!(!service.is_input_valueable(""));
         assert!(

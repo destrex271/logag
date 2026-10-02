@@ -70,6 +70,9 @@ impl std::fmt::Display for StorageEngineErrors {
     }
 }
 
+// `async_trait` emits its own `#[must_use]` on the boxed futures it generates, which trips
+// `clippy::double_must_use` on the expanded code.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait StorageEngine: Send + Sync + 'static {
     async fn load_storage(config: GlobalConfig) -> Self

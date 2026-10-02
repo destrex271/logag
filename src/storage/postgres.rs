@@ -250,8 +250,7 @@ impl StorageEngine for PostgresStorage {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::global_config::GlobalConfig;
-    use crate::shared_log::log::{LogContent, LogEvent};
+    use crate::shared_log::log::LogEvent;
     use crate::shared_log::traits::{Event, EventType};
     use testcontainers::core::{IntoContainerPort, WaitFor};
     use testcontainers::runners::AsyncRunner;
