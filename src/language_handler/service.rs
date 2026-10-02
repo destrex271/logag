@@ -1,4 +1,3 @@
-use crate::shared_log::agent_recorder::{self, AgentRecorder};
 use regex::Regex;
 
 const TOKEN_COUNT_THRESHOLD: isize = 30;
@@ -54,6 +53,8 @@ impl Clone for LanguageService {
 }
 
 mod tests {
+    use super::*;
+
     #[test]
     fn test_is_input_valueable() {
         let service = LanguageService::new();
