@@ -13,6 +13,7 @@ duckdb = "1.10502.0"
 fastembed = "5.17.2"
 log = "0.4.29"
 paris = { version = "1.5", features = ["timestamps"] }
+regex = "1.13.1"
 rmcp = { version = "1.7", features = ["server", "transport-streamable-http-server"] }
 schemars = "1.2.1"
 serde = "1.0.228"
