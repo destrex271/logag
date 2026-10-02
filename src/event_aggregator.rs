@@ -73,6 +73,15 @@ impl EventAggregator {
         agent_content: String,
         unix_epoch_timestamp: String,
     ) -> String {
+        // Verify if the content from user is event useful to store as a dedicated user event.
+        if !self.lang_service.is_input_valueable(&user_content)
+            || !self.lang_service.is_input_valueable(&agent_content)
+        {
+            tracing::info!(
+                "Data sent by agent is not valuable -- will not store this information."
+            );
+            return "success".to_string();
+        }
         self.shared_log.append_event_pair(
             self.event_factory.create_log_event(
                 self.lang_service.format_content(&user_content),
