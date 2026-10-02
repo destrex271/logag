@@ -1,0 +1,2 @@
+- name: Rust Release
+  uses: manoadamro/rust-release@v1
