@@ -1,0 +1,15 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release-rust:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Rust Release
+      uses: manoadamro/rust-release@v1
