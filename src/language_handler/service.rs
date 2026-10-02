@@ -1,7 +1,7 @@
 use crate::shared_log::agent_recorder::{self, AgentRecorder};
 use regex::Regex;
 
-const TOKEN_COUNT_THRESHOLD: isize = 50;
+const TOKEN_COUNT_THRESHOLD: isize = 30;
 
 pub struct LanguageService {
     word_split_regex: Regex,
