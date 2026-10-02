@@ -36,7 +36,8 @@ impl LanguageService {
             .word_split_regex
             .split(content)
             .filter(|s| !s.is_empty())
-            .collect();
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
     }
 }
 

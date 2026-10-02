@@ -77,7 +77,9 @@ impl EventAggregator {
         if !self.lang_service.is_input_valueable(&user_content)
             || !self.lang_service.is_input_valueable(&agent_content)
         {
-            tracing::info!("Data sent by agent is not valuable -- will not store this information.")
+            tracing::info!(
+                "Data sent by agent is not valuable -- will not store this information."
+            );
             return "success".to_string();
         }
         self.shared_log.append_event_pair(
