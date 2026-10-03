@@ -1,15 +1,23 @@
 use axum::routing::post;
 use clap::Parser;
+use logag::storage::traits::{StorageBackendProvider, StorageEngine};
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
 use logag::http_response_handler::HTTPResponseHandler;
 use logag::observability::Observability;
+use logag::project_management::ProjectManagementService;
 use logag::retrieval_engine::RetrievalEngine;
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use std::sync::Arc;
 
 const MCP_BIND_ADDR: &str = "127.0.0.1:8000";
+
+async fn create_storage_service(config: GlobalConfig) -> Arc<Box<dyn StorageEngine>> {
+    let storage = StorageBackendProvider::get_storage_backend(config).await;
+    Arc::new(storage)
+}
 
 //
 // TODO: Add Auth.
@@ -31,8 +39,10 @@ async fn main() -> anyhow::Result<()> {
 
     Observability::init();
 
+    let storage = create_storage_service(config.clone()).await;
     let retrieval_engine = RetrievalEngine::new(config.clone());
     let aggregator = EventAggregator::new(config);
+    let project_mgmt_service = ProjectManagementService::new(storage).await;
 
     let mcp_aggregator = aggregator.clone();
     let mcp_retrieval_engine = retrieval_engine.clone();
