@@ -1,4 +1,4 @@
-use std::{error::Error, str::FromStr};
+use std::{collections::HashMap, error::Error, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -110,6 +110,9 @@ pub trait StorageEngine: Send + Sync + 'static {
         project_name: String,
         timestamp: String,
     ) -> Result<uuid::Uuid, StorageEngineErrors>;
+    async fn get_all_project_lanes(
+        &self,
+    ) -> Result<HashMap<uuid::Uuid, String>, StorageEngineErrors>;
 }
 
 #[cfg(test)]
