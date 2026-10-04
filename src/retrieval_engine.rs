@@ -1,8 +1,10 @@
 use std::sync::Arc;
+use std::str::FromStr;
 
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     global_config::GlobalConfig,
@@ -16,6 +18,7 @@ use crate::{
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 pub struct ReadQuery {
     content: String,
+    project_lane: String,
 }
 
 #[derive(Clone)]
@@ -38,13 +41,14 @@ impl RetrievalEngine {
     #[tool(description = "Get latest agent output that was stored for similar user query.")]
     pub fn get_cached_agent_response(
         &self,
-        Parameters(ReadQuery { content }): Parameters<ReadQuery>,
+        Parameters(ReadQuery { content, project_lane }): Parameters<ReadQuery>,
     ) -> String {
+        let project_lane_uuid = Uuid::from_str(&project_lane).unwrap_or_else(|_| Uuid::nil());
         let formatted_content = self.lang_service.format_content(&content);
 
         let user_event_ref: SlimUserEmbeddingInput = match self
             .shared_log
-            .find_similar_user_event(formatted_content.clone())
+            .find_similar_user_event(formatted_content.clone(), project_lane_uuid)
         {
             Ok(response) => response,
             Err(err) => return format!("unable to find similar user input: {:?}", err),
@@ -52,7 +56,7 @@ impl RetrievalEngine {
 
         let agent_response = self
             .shared_log
-            .fetch_ai_response_for_user_event(user_event_ref.user_event_id);
+            .fetch_ai_response_for_user_event(user_event_ref.user_event_id, project_lane_uuid);
 
         match agent_response {
             Ok(response) => {

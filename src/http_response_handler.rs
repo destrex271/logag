@@ -30,6 +30,7 @@ impl HTTPResponseHandler {
             harness_data.user_input,
             harness_data.agent_output,
             timestamp,
+            harness_data.project_lane,
         );
     }
 }
@@ -56,7 +57,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_body_with_valid_json() {
         let handler = test_handler();
-        let body = r#"{"userInput":"hello","agentOutput":"world"}"#;
+        let body = r#"{"userInput":"hello","agentOutput":"world","projectLane":"00000000-0000-0000-0000-000000000000"}"#;
         handler.process_body(body);
     }
 
@@ -87,7 +88,7 @@ mod tests {
             .uri("/record")
             .header("Content-Type", "application/json")
             .body(axum::body::Body::from(
-                r#"{"userInput":"hi","agentOutput":"bye"}"#,
+                r#"{"userInput":"hi","agentOutput":"bye","projectLane":"00000000-0000-0000-0000-000000000000"}"#,
             ))
             .unwrap();
 

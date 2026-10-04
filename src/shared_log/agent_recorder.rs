@@ -38,20 +38,21 @@ impl AgentRecorder {
 }
 
 impl SharedLog for AgentRecorder {
-    fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid {
+    fn append_event(&self, event: Box<dyn Event>, project_lane: uuid::Uuid) -> uuid::Uuid {
         let id: uuid::Uuid = event.get_id();
 
         tracing::info!(
             content = %event.get_content(),
             event_type = %event.get_event_type(),
             id = %event.get_id(),
+            project_lane = %project_lane,
             "appended standalone event to log"
         );
 
         let storage = self.storage.clone();
         let handle = tokio::spawn(async move {
             if let Some(engine) = storage.get() {
-                let _ = engine.store_event(event.as_ref()).await;
+                let _ = engine.store_event(event.as_ref(), project_lane).await;
             }
         });
         tokio::task::block_in_place(|| {
@@ -62,12 +63,17 @@ impl SharedLog for AgentRecorder {
         id
     }
 
-    fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>) {
+    fn append_event_pair(
+        &self,
+        user_input: Box<dyn Event>,
+        agent_output: Box<dyn Event>,
+        project_lane: uuid::Uuid,
+    ) {
         // TODO(update method to return errors).
 
         let user_content = user_input.get_content().clone();
-        let user_event_id = self.append_event(user_input);
-        let agent_event_id = self.append_event(agent_output);
+        let user_event_id = self.append_event(user_input, project_lane);
+        let agent_event_id = self.append_event(agent_output, project_lane);
 
         // Generate Embeddings for user.
         tracing::info_span!("generating_embeddings");
@@ -81,12 +87,13 @@ impl SharedLog for AgentRecorder {
         tracing::info_span!("generated embeddings");
 
         let storage = self.storage.clone();
+        let project_lane = project_lane;
         tokio::spawn(async move {
             tracing::info!("inserting user embeddings for event id: {}", user_event_id);
             // Store embeddings.
             if let Some(engine) = storage.get() {
                 let _ = engine
-                    .store_user_input_embedding(user_event_id, &embeddings.unwrap())
+                    .store_user_input_embedding(user_event_id, &embeddings.unwrap(), project_lane)
                     .await;
             } else {
                 tracing::error!("unable to use storage engine.");
@@ -103,7 +110,7 @@ impl SharedLog for AgentRecorder {
             );
             if let Some(engine) = storage.get() {
                 let _ = engine
-                    .store_cached_agent_response(agent_event_id, user_event_id)
+                    .store_cached_agent_response(agent_event_id, user_event_id, project_lane)
                     .await;
             }
             tracing::info!("inserted agent output.")
@@ -113,6 +120,7 @@ impl SharedLog for AgentRecorder {
     fn find_similar_user_event(
         &self,
         user_content: String,
+        project_lane: uuid::Uuid,
     ) -> Result<SlimUserEmbeddingInput, SharedLogErrors> {
         // Generate embedding.
         let embeddings: Option<Vec<f32>> = self.embedding_model.get().and_then(|model| {
@@ -141,7 +149,7 @@ impl SharedLog for AgentRecorder {
         let handle = Handle::current();
         let result: Result<SlimUserEmbeddingInput, StorageEngineErrors> =
             tokio::task::block_in_place(|| {
-                handle.block_on(engine.get_similar_user_input_embedding(embeddings_data))
+                handle.block_on(engine.get_similar_user_input_embedding(embeddings_data, project_lane))
             });
 
         match result {
@@ -153,12 +161,13 @@ impl SharedLog for AgentRecorder {
     fn fetch_ai_response_for_user_event(
         &self,
         user_input_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<LogContent, SharedLogErrors> {
         let storage = self.storage.clone();
         let engine = storage.get().unwrap();
         let handle = Handle::current();
         let result: Result<LogContent, StorageEngineErrors> = tokio::task::block_in_place(|| {
-            handle.block_on(engine.get_agent_output_for_user_input(user_input_id))
+            handle.block_on(engine.get_agent_output_for_user_input(user_input_id, project_lane))
         });
 
         match result {
@@ -207,7 +216,11 @@ pub(crate) mod test_utils {
             }
         }
 
-        async fn store_event(&self, _event: &dyn Event) -> Result<(), StorageEngineErrors> {
+        async fn store_event(
+            &self,
+            _event: &dyn Event,
+            _project_lane: uuid::Uuid,
+        ) -> Result<(), StorageEngineErrors> {
             self.store_count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -216,6 +229,7 @@ pub(crate) mod test_utils {
             &self,
             _user_event_id: uuid::Uuid,
             _embedding: &[f32],
+            _project_lane: uuid::Uuid,
         ) -> Result<(), StorageEngineErrors> {
             Ok(())
         }
@@ -224,6 +238,7 @@ pub(crate) mod test_utils {
             &self,
             _log_event_id: uuid::Uuid,
             _user_query_id: uuid::Uuid,
+            _project_lane: uuid::Uuid,
         ) -> Result<(), StorageEngineErrors> {
             Ok(())
         }
@@ -231,6 +246,7 @@ pub(crate) mod test_utils {
         async fn get_similar_user_input_embedding(
             &self,
             _embedding: Vec<f32>,
+            _project_lane: uuid::Uuid,
         ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors> {
             Err(StorageEngineErrors::NoDataForField("mock: no data".into()))
         }
@@ -238,6 +254,7 @@ pub(crate) mod test_utils {
         async fn get_agent_output_for_user_input(
             &self,
             _user_input_id: uuid::Uuid,
+            _project_lane: uuid::Uuid,
         ) -> Result<LogContent, StorageEngineErrors> {
             Err(StorageEngineErrors::NoDataForField("mock: no data".into()))
         }
@@ -250,6 +267,7 @@ mod tests {
     use super::*;
     use crate::shared_log::traits::{EventFactory, EventType};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use uuid;
 
     #[test]
     fn test_agent_recorder_new_creates_empty_storage() {
@@ -264,8 +282,9 @@ mod tests {
             "test".into(),
             "1000000".into(),
             EventType::UserInput,
+            uuid::Uuid::nil(),
         );
-        recorder.append_event(event);
+        recorder.append_event(event, uuid::Uuid::nil());
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
@@ -281,8 +300,9 @@ mod tests {
             "test".into(),
             "1000000".into(),
             EventType::UserInput,
+            uuid::Uuid::nil(),
         );
-        recorder.append_event(event);
+        recorder.append_event(event, uuid::Uuid::nil());
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         assert_eq!(store_count.load(Ordering::SeqCst), 1);
@@ -301,8 +321,9 @@ mod tests {
                 format!("event-{}", i),
                 format!("{}", 1000000 + i),
                 EventType::UserInput,
+                uuid::Uuid::nil(),
             );
-            recorder.append_event(event);
+            recorder.append_event(event, uuid::Uuid::nil());
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;

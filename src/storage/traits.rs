@@ -78,24 +78,32 @@ pub trait StorageEngine: Send + Sync + 'static {
     async fn load_storage(config: GlobalConfig) -> Self
     where
         Self: Sized;
-    async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
+    async fn store_event(
+        &self,
+        event: &dyn Event,
+        project_lane: uuid::Uuid,
+    ) -> Result<(), StorageEngineErrors>;
     async fn store_user_input_embedding(
         &self,
         user_event_id: uuid::Uuid,
         embedding: &[f32],
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors>;
     async fn store_cached_agent_response(
         &self,
         log_event_id: uuid::Uuid,
         user_query_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors>;
     async fn get_similar_user_input_embedding(
         &self,
         embedding: Vec<f32>,
+        project_lane: uuid::Uuid,
     ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors>;
     async fn get_agent_output_for_user_input(
         &self,
         user_input_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<LogContent, StorageEngineErrors>;
 }
 

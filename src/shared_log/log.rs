@@ -16,6 +16,7 @@ pub struct LogEvent {
     event_type: EventType,
     content: LogContent,
     timestamp: String,
+    project_lane: String,
 }
 
 impl Event for LogEvent {
@@ -34,6 +35,10 @@ impl Event for LogEvent {
     fn get_timestamp(&self) -> isize {
         self.timestamp.parse::<isize>().unwrap()
     }
+
+    fn get_project_lane(&self) -> uuid::Uuid {
+        uuid::Uuid::from_str(self.project_lane.as_str()).unwrap()
+    }
 }
 
 impl LogContent {
@@ -46,7 +51,7 @@ impl LogContent {
 }
 
 impl LogEvent {
-    pub fn new(event_type: EventType, content: String, timestamp: String) -> Self {
+    pub fn new(event_type: EventType, content: String, timestamp: String, project_lane: uuid::Uuid) -> Self {
         let content = LogContent::new(content);
         let seconds = timestamp.parse::<isize>().unwrap();
         let id = uuid::Uuid::new_v7(Timestamp::from_unix_time(seconds as u64, 0, 0, 0));
@@ -55,6 +60,7 @@ impl LogEvent {
             event_type,
             content,
             timestamp,
+            project_lane: project_lane.to_string(),
         }
     }
 }
@@ -71,6 +77,7 @@ mod tests {
             EventType::UserInput,
             "test content".into(),
             "987654321".into(),
+            uuid::Uuid::nil(),
         );
         assert_eq!(event.get_event_type().to_string(), "user_input");
         assert_eq!(event.get_content(), "test content");

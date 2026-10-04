@@ -5,6 +5,8 @@ use crate::shared_log::traits::{EventFactory, EventType, SharedLog};
 use rmcp::schemars::JsonSchema;
 use rmcp::serde::Deserialize;
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
+use std::str::FromStr;
+use uuid;
 
 pub struct EventAggregator {
     event_factory: EventFactory,
@@ -19,6 +21,7 @@ pub struct MCPEvent {
     content: String,
     unix_epoch_timestamp: String,
     agent_notes: String,
+    project_lane: String,
 }
 
 impl Clone for EventAggregator {
@@ -53,15 +56,21 @@ impl EventAggregator {
             content,
             unix_epoch_timestamp,
             agent_notes,
+            project_lane,
         }): Parameters<MCPEvent>,
     ) -> String {
+        let project_lane_uuid = uuid::Uuid::from_str(&project_lane).unwrap_or_else(|_| uuid::Uuid::nil());
         let formatted_content = self.lang_service.format_content(&content);
         self.shared_log
-            .append_event(self.event_factory.create_log_event(
-                formatted_content,
-                unix_epoch_timestamp,
-                event_type,
-            ));
+            .append_event(
+                self.event_factory.create_log_event(
+                    formatted_content,
+                    unix_epoch_timestamp,
+                    event_type,
+                    project_lane_uuid,
+                ),
+                project_lane_uuid,
+            );
         tracing::info!("{:?}", agent_notes);
         tracing::info!(agent_notes = %agent_notes, "add_event called");
         "success".to_string()
@@ -72,7 +81,9 @@ impl EventAggregator {
         user_content: String,
         agent_content: String,
         unix_epoch_timestamp: String,
+        project_lane: String,
     ) -> String {
+        let project_lane_uuid = uuid::Uuid::from_str(&project_lane).unwrap_or_else(|_| uuid::Uuid::nil());
         // Verify if the content from user is event useful to store as a dedicated user event.
         if !self.lang_service.is_input_valueable(&user_content)
             || !self.lang_service.is_input_valueable(&agent_content)
@@ -87,12 +98,15 @@ impl EventAggregator {
                 self.lang_service.format_content(&user_content),
                 unix_epoch_timestamp.clone(),
                 EventType::UserInput,
+                project_lane_uuid,
             ),
             self.event_factory.create_log_event(
                 self.lang_service.format_content(&agent_content),
                 unix_epoch_timestamp,
                 EventType::AgentOutput,
+                project_lane_uuid,
             ),
+            project_lane_uuid,
         );
         "success".to_string()
     }
@@ -119,6 +133,7 @@ mod tests {
     use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
     use crate::shared_log::traits::EventType;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use uuid;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_event_aggregator_add_event_with_storage() {
@@ -145,6 +160,7 @@ mod tests {
             content: "test output".into(),
             unix_epoch_timestamp: "2000000".into(),
             agent_notes: "notes".into(),
+            project_lane: uuid::Uuid::nil().to_string(),
         };
 
         let result = aggregator.add_event(Parameters(mcp_event));
