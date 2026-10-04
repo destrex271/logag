@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::shared_log::log::LogContent;
 use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
@@ -272,6 +274,30 @@ impl StorageEngine for PostgresStorage {
         .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?;
         Ok(uuid)
     }
+
+    async fn get_all_project_lanes(
+        &self,
+    ) -> Result<HashMap<uuid::Uuid, String>, StorageEngineErrors> {
+        let mut connection = self.acquire_connection().await?;
+        let mut lanes = HashMap::new();
+        let rows = sqlx::query(
+            r#"
+            SELECT id, name FROM ProjectLane
+            "#,
+        )
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?;
+        for row in rows {
+            lanes.insert(
+                row.try_get("id")
+                    .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?,
+                row.try_get("name")
+                    .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?,
+            );
+        }
+        Ok(lanes)
+    }
 }
 
 #[cfg(test)]
@@ -392,5 +418,24 @@ mod test {
             .unwrap();
 
         assert_eq!(log_content.get_content(), "test agent output");
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_get_all_project_lanes() {
+        let n = 10;
+        let (_container, conn_string) = setup_postgres_container().await;
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        // generate mock lanes.
+        for i in 0..n {
+            storage
+                .store_project_lane(format!("lane_{}", i), "2000000".to_string())
+                .await
+                .unwrap();
+        }
+
+        let lanes = storage.get_all_project_lanes().await.unwrap();
+        assert_eq!(lanes.len(), n);
     }
 }
