@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use log::LevelFilter;
 use sqlx::migrate::Migrator;
 use sqlx::{Pool, Postgres, Row, pool::PoolConnection, postgres::PgPoolOptions};
-use uuid::Uuid;
+use uuid::{Timestamp, Uuid};
 
 const MAX_CONNECTIONS: u8 = 5;
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -165,7 +165,7 @@ impl StorageEngine for PostgresStorage {
         let query = sqlx::query(
             r#"
             WITH closest_matches AS (
-                SELECT user_event_id FROM UserInputEmbedding WHERE project_lane = $2 ORDER BY embedding <%> $1::vector ASC LIMIT 1
+                SELECT user_event_id FROM UserInputEmbedding WHERE project_lane = $2 ORDER BY embedding <~> $1::vector ASC LIMIT 1
             )
             SELECT * FROM closest_matches ORDER BY user_event_id DESC;
             "#,
@@ -251,6 +251,26 @@ impl StorageEngine for PostgresStorage {
             "no content found for agent event {}",
             event_id
         )))
+    }
+
+    async fn store_project_lane(
+        &self,
+        project_name: String,
+        timestamp: String,
+    ) -> Result<uuid::Uuid, StorageEngineErrors> {
+        let mut connection = self.acquire_connection().await?;
+        let seconds = timestamp.parse::<isize>().unwrap();
+        let uuid = uuid::Uuid::new_v7(Timestamp::from_unix_time(seconds as u64, 0, 0, 0));
+        sqlx::query(
+            r#"
+            INSERT INTO ProjectLane (name) VALUES ($1)
+            "#,
+        )
+        .bind(project_name)
+        .execute(&mut *connection)
+        .await
+        .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?;
+        Ok(uuid)
     }
 }
 

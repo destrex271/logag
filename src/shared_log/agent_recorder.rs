@@ -258,6 +258,14 @@ pub(crate) mod test_utils {
         ) -> Result<LogContent, StorageEngineErrors> {
             Err(StorageEngineErrors::NoDataForField("mock: no data".into()))
         }
+
+        async fn store_project_lane(
+            &self,
+            _project_name: String,
+            _timestamp: String,
+        ) -> Result<uuid::Uuid, StorageEngineErrors> {
+            Ok(uuid::Uuid::nil())
+        }
     }
 }
 
