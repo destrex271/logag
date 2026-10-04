@@ -21,15 +21,22 @@ impl std::fmt::Display for EventType {
 }
 
 pub trait SharedLog {
-    fn append_event(&self, event: Box<dyn Event>) -> uuid::Uuid;
-    fn append_event_pair(&self, user_input: Box<dyn Event>, agent_output: Box<dyn Event>);
+    fn append_event(&self, event: Box<dyn Event>, project_lane: uuid::Uuid) -> uuid::Uuid;
+    fn append_event_pair(
+        &self,
+        user_input: Box<dyn Event>,
+        agent_output: Box<dyn Event>,
+        project_lane: uuid::Uuid,
+    );
     fn find_similar_user_event(
         &self,
         user_input: String,
+        project_lane: uuid::Uuid,
     ) -> Result<SlimUserEmbeddingInput, SharedLogErrors>;
     fn fetch_ai_response_for_user_event(
         &self,
         user_input_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<LogContent, SharedLogErrors>;
 }
 
@@ -39,6 +46,7 @@ pub trait Event: Send + Sync {
     fn get_content(&self) -> String;
     fn get_id(&self) -> uuid::Uuid; // Only use uuid v7.
     fn get_timestamp(&self) -> isize;
+    fn get_project_lane(&self) -> uuid::Uuid;
 }
 
 #[derive(Clone)]
@@ -54,8 +62,9 @@ impl EventFactory {
         content: String,
         timestamp: String,
         event_type: EventType,
+        project_lane: uuid::Uuid,
     ) -> Box<dyn Event> {
-        Box::new(LogEvent::new(event_type, content, timestamp))
+        Box::new(LogEvent::new(event_type, content, timestamp, project_lane))
     }
 }
 
@@ -80,6 +89,7 @@ mod tests {
             "hello".to_string(),
             "1000000".to_string(),
             EventType::UserInput,
+            uuid::Uuid::nil(),
         );
         assert_eq!(event.get_content(), "hello");
         assert_eq!(event.get_timestamp(), 1000000);

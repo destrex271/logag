@@ -5,4 +5,5 @@ use serde::{Deserialize, Serialize};
 pub struct HarnessResponse {
     pub user_input: String,
     pub agent_output: String,
+    pub project_lane: String, // This is supposed to be a UUID.
 }

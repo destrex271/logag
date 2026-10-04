@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::shared_log::log::LogContent;
 use crate::shared_log::user_embedding_model::SlimUserEmbeddingInput;
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
@@ -5,7 +7,7 @@ use chrono::{DateTime, Utc};
 use log::LevelFilter;
 use sqlx::migrate::Migrator;
 use sqlx::{Pool, Postgres, Row, pool::PoolConnection, postgres::PgPoolOptions};
-use uuid::Uuid;
+use uuid::{Timestamp, Uuid};
 
 const MAX_CONNECTIONS: u8 = 5;
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -64,6 +66,7 @@ impl StorageEngine for PostgresStorage {
     async fn store_event(
         &self,
         event: &dyn crate::shared_log::traits::Event,
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors> {
         let timestamp: isize = event.get_timestamp();
         let content: String = event.get_content();
@@ -75,21 +78,20 @@ impl StorageEngine for PostgresStorage {
 
         let mut connection = self.acquire_connection().await?;
 
-        let query = sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO LogEvent (id, content, timestamp, event_type)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO LogEvent (id, content, timestamp, event_type, project_lane)
+            VALUES ($1, $2, $3, $4, $5)
             "#,
-            id,
-            content,
-            datetime,
-            event_type
-        );
-
-        query
-            .execute(&mut *connection)
-            .await
-            .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+        )
+        .bind(id)
+        .bind(content)
+        .bind(datetime)
+        .bind(event_type)
+        .bind(project_lane)
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }
@@ -98,6 +100,7 @@ impl StorageEngine for PostgresStorage {
         &self,
         user_event_id: uuid::Uuid,
         embedding: &[f32],
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors> {
         let mut connection = self.acquire_connection().await?;
 
@@ -111,10 +114,11 @@ impl StorageEngine for PostgresStorage {
         );
 
         sqlx::query(
-            "INSERT INTO UserInputEmbedding (user_event_id, embedding) VALUES ($1, $2::vector)",
+            "INSERT INTO UserInputEmbedding (user_event_id, embedding, project_lane) VALUES ($1, $2::vector, $3)",
         )
         .bind(user_event_id)
         .bind(&embedding_str)
+        .bind(project_lane)
         .execute(&mut *connection)
         .await
         .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
@@ -126,22 +130,22 @@ impl StorageEngine for PostgresStorage {
         &self,
         log_event_id: uuid::Uuid,
         user_query_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors> {
         let mut connection = self.acquire_connection().await?;
 
-        let query = sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO CachedAgentResponse (log_event_id, user_query_id)
-            VALUES ($1, $2)
+            INSERT INTO CachedAgentResponse (log_event_id, user_query_id, project_lane)
+            VALUES ($1, $2, $3)
             "#,
-            log_event_id,
-            user_query_id,
-        );
-
-        query
-            .execute(&mut *connection)
-            .await
-            .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
+        )
+        .bind(log_event_id)
+        .bind(user_query_id)
+        .bind(project_lane)
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| StorageEngineErrors::DatabaseError(Box::new(e)))?;
 
         Ok(())
     }
@@ -149,6 +153,7 @@ impl StorageEngine for PostgresStorage {
     async fn get_similar_user_input_embedding(
         &self,
         embedding: Vec<f32>,
+        project_lane: uuid::Uuid,
     ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors> {
         let embedding_as_vec: String = format!(
             "[{}]",
@@ -162,12 +167,13 @@ impl StorageEngine for PostgresStorage {
         let query = sqlx::query(
             r#"
             WITH closest_matches AS (
-                SELECT user_event_id FROM UserInputEmbedding ORDER BY embedding <=> $1::vector ASC LIMIT 1
+                SELECT user_event_id FROM UserInputEmbedding WHERE project_lane = $2 ORDER BY embedding <~> $1::vector ASC LIMIT 1
             )
             SELECT * FROM closest_matches ORDER BY user_event_id DESC;
             "#,
         )
-        .bind(&embedding_as_vec);
+        .bind(&embedding_as_vec)
+        .bind(project_lane);
 
         let mut connection = self.acquire_connection().await?;
         let rows = query
@@ -201,13 +207,15 @@ impl StorageEngine for PostgresStorage {
     async fn get_agent_output_for_user_input(
         &self,
         user_input_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<LogContent, StorageEngineErrors> {
         let query1 = sqlx::query(
             r#"
-            SELECT log_event_id FROM CachedAgentResponse where user_query_id = $1;
+            SELECT log_event_id FROM CachedAgentResponse where user_query_id = $1 AND project_lane = $2;
             "#,
         )
-        .bind(user_input_id);
+        .bind(user_input_id)
+        .bind(project_lane);
 
         let mut connection = self.acquire_connection().await?;
         let rows = query1
@@ -227,10 +235,11 @@ impl StorageEngine for PostgresStorage {
 
         let query2 = sqlx::query(
             r#"
-            SELECT content FROM LogEvent WHERE id=$1
+            SELECT content FROM LogEvent WHERE id=$1 AND project_lane = $2
             "#,
         )
-        .bind(event_id);
+        .bind(event_id)
+        .bind(project_lane);
         let row = query2
             .fetch_one(&mut *connection)
             .await
@@ -244,6 +253,50 @@ impl StorageEngine for PostgresStorage {
             "no content found for agent event {}",
             event_id
         )))
+    }
+
+    async fn store_project_lane(
+        &self,
+        project_name: String,
+        timestamp: String,
+    ) -> Result<uuid::Uuid, StorageEngineErrors> {
+        let mut connection = self.acquire_connection().await?;
+        let seconds = timestamp.parse::<isize>().unwrap();
+        let uuid = uuid::Uuid::new_v7(Timestamp::from_unix_time(seconds as u64, 0, 0, 0));
+        sqlx::query(
+            r#"
+            INSERT INTO ProjectLane (name) VALUES ($1)
+            "#,
+        )
+        .bind(project_name)
+        .execute(&mut *connection)
+        .await
+        .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?;
+        Ok(uuid)
+    }
+
+    async fn get_all_project_lanes(
+        &self,
+    ) -> Result<HashMap<uuid::Uuid, String>, StorageEngineErrors> {
+        let mut connection = self.acquire_connection().await?;
+        let mut lanes = HashMap::new();
+        let rows = sqlx::query(
+            r#"
+            SELECT id, name FROM ProjectLane
+            "#,
+        )
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?;
+        for row in rows {
+            lanes.insert(
+                row.try_get("id")
+                    .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?,
+                row.try_get("name")
+                    .map_err(|err| StorageEngineErrors::DatabaseError(Box::new(err)))?,
+            );
+        }
+        Ok(lanes)
     }
 }
 
@@ -289,25 +342,30 @@ mod test {
         let storage = PostgresStorage::new(conn_string.clone());
         storage.run_migration().await.unwrap();
 
+        let project_lane = uuid::Uuid::nil();
         let timestamp = "1000000".to_string();
         let user_event = LogEvent::new(
             EventType::UserInput,
             "test user input".to_string(),
             timestamp.clone(),
+            project_lane,
         );
 
-        storage.store_event(&user_event).await.unwrap();
+        storage
+            .store_event(&user_event, project_lane)
+            .await
+            .unwrap();
 
         let embedding: Vec<f32> = (0..384).map(|i| i as f32 / 384.0).collect();
         let user_event_id = user_event.get_id();
         storage
-            .store_user_input_embedding(user_event_id, &embedding)
+            .store_user_input_embedding(user_event_id, &embedding, project_lane)
             .await
             .unwrap();
 
         let similar_embedding: Vec<f32> = (0..384).map(|i| (i as f32 + 0.5) / 384.0).collect();
         let result = storage
-            .get_similar_user_input_embedding(similar_embedding)
+            .get_similar_user_input_embedding(similar_embedding, project_lane)
             .await
             .unwrap();
 
@@ -320,14 +378,19 @@ mod test {
         let storage = PostgresStorage::new(conn_string.clone());
         storage.run_migration().await.unwrap();
 
+        let project_lane = uuid::Uuid::nil();
         let user_timestamp = "1000000".to_string();
         let user_event = LogEvent::new(
             EventType::UserInput,
             "test user input".to_string(),
             user_timestamp.clone(),
+            project_lane,
         );
 
-        storage.store_event(&user_event).await.unwrap();
+        storage
+            .store_event(&user_event, project_lane)
+            .await
+            .unwrap();
         let user_event_id = user_event.get_id();
 
         let agent_timestamp = "2000000".to_string();
@@ -335,21 +398,44 @@ mod test {
             EventType::AgentOutput,
             "test agent output".to_string(),
             agent_timestamp.clone(),
+            project_lane,
         );
 
-        storage.store_event(&agent_event).await.unwrap();
+        storage
+            .store_event(&agent_event, project_lane)
+            .await
+            .unwrap();
         let agent_event_id = agent_event.get_id();
 
         storage
-            .store_cached_agent_response(agent_event_id, user_event_id)
+            .store_cached_agent_response(agent_event_id, user_event_id, project_lane)
             .await
             .unwrap();
 
         let log_content = storage
-            .get_agent_output_for_user_input(user_event_id)
+            .get_agent_output_for_user_input(user_event_id, project_lane)
             .await
             .unwrap();
 
         assert_eq!(log_content.get_content(), "test agent output");
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_get_all_project_lanes() {
+        let n = 10;
+        let (_container, conn_string) = setup_postgres_container().await;
+        let storage = PostgresStorage::new(conn_string.clone());
+        storage.run_migration().await.unwrap();
+
+        // generate mock lanes.
+        for i in 0..n {
+            storage
+                .store_project_lane(format!("lane_{}", i), "2000000".to_string())
+                .await
+                .unwrap();
+        }
+
+        let lanes = storage.get_all_project_lanes().await.unwrap();
+        assert_eq!(lanes.len(), n);
     }
 }

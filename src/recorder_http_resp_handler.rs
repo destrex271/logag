@@ -4,11 +4,11 @@ use std::sync::Arc;
 use crate::event_aggregator::EventAggregator;
 use crate::harnesses::HarnessResponse;
 
-pub struct HTTPResponseHandler {
+pub struct RecordHTTPResponseHandler {
     event_aggregator: EventAggregator,
 }
 
-impl HTTPResponseHandler {
+impl RecordHTTPResponseHandler {
     pub fn new(event_aggregator: EventAggregator) -> Self {
         Self { event_aggregator }
     }
@@ -30,6 +30,7 @@ impl HTTPResponseHandler {
             harness_data.user_input,
             harness_data.agent_output,
             timestamp,
+            harness_data.project_lane,
         );
     }
 }
@@ -45,18 +46,18 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
     use tower::util::ServiceExt;
 
-    fn test_handler() -> HTTPResponseHandler {
+    fn test_handler() -> RecordHTTPResponseHandler {
         let engine = Box::new(MockStorageEngine {
             store_count: Arc::new(AtomicUsize::new(0)),
         });
         let recorder = Arc::new(AgentRecorder::new_with_storage(engine));
-        HTTPResponseHandler::new(EventAggregator::new_with_recorder(recorder))
+        RecordHTTPResponseHandler::new(EventAggregator::new_with_recorder(recorder))
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_body_with_valid_json() {
         let handler = test_handler();
-        let body = r#"{"userInput":"hello","agentOutput":"world"}"#;
+        let body = r#"{"userInput":"hello","agentOutput":"world","projectLane":"00000000-0000-0000-0000-000000000000"}"#;
         handler.process_body(body);
     }
 
@@ -79,7 +80,7 @@ mod tests {
     async fn test_handle_post_response_returns_ok() {
         let handler = Arc::new(test_handler());
         let router = axum::Router::new()
-            .route("/record", post(HTTPResponseHandler::handle_post_response))
+            .route("/record", post(RecordHTTPResponseHandler::handle_post_response))
             .with_state(handler);
 
         let request = axum::http::Request::builder()
@@ -87,7 +88,7 @@ mod tests {
             .uri("/record")
             .header("Content-Type", "application/json")
             .body(axum::body::Body::from(
-                r#"{"userInput":"hi","agentOutput":"bye"}"#,
+                r#"{"userInput":"hi","agentOutput":"bye","projectLane":"00000000-0000-0000-0000-000000000000"}"#,
             ))
             .unwrap();
 

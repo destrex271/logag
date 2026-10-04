@@ -2,14 +2,22 @@ use axum::routing::post;
 use clap::Parser;
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
-use logag::http_response_handler::HTTPResponseHandler;
+use logag::recorder_http_resp_handler::RecordHTTPResponseHandler;
 use logag::observability::Observability;
+use logag::project_management::ProjectManagementService;
 use logag::retrieval_engine::RetrievalEngine;
+use logag::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use std::sync::Arc;
 
 const MCP_BIND_ADDR: &str = "127.0.0.1:8000";
+
+async fn create_storage_service(config: GlobalConfig) -> Arc<Box<dyn StorageEngine>> {
+    let storage = StorageBackendProvider::get_storage_backend(config).await;
+    Arc::new(storage)
+}
 
 //
 // TODO: Add Auth.
@@ -31,8 +39,10 @@ async fn main() -> anyhow::Result<()> {
 
     Observability::init();
 
+    let storage = create_storage_service(config.clone()).await;
     let retrieval_engine = RetrievalEngine::new(config.clone());
     let aggregator = EventAggregator::new(config);
+    let project_mgmt_service = ProjectManagementService::new(storage).await;
 
     let mcp_aggregator = aggregator.clone();
     let mcp_retrieval_engine = retrieval_engine.clone();
@@ -49,12 +59,12 @@ async fn main() -> anyhow::Result<()> {
         StreamableHttpServerConfig::default(),
     );
 
-    let http_handler = std::sync::Arc::new(HTTPResponseHandler::new(aggregator));
+    let http_handler = std::sync::Arc::new(RecordHTTPResponseHandler::new(aggregator));
 
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
         .nest_service("/read_mcp", read_mcp_service)
-        .route("/record", post(HTTPResponseHandler::handle_post_response))
+        .route("/record", post(RecordHTTPResponseHandler::handle_post_response))
         .with_state(http_handler);
     let tcp_listener = tokio::net::TcpListener::bind(MCP_BIND_ADDR).await?;
     tracing::info!("Started HTTP + MCP endpoints at {}", MCP_BIND_ADDR);
