@@ -2,7 +2,7 @@ mod embeddings;
 pub mod event_aggregator;
 pub mod global_config;
 pub(crate) mod harnesses;
-pub mod http_response_handler;
+pub mod recorder_http_resp_handler;
 pub mod language_handler;
 pub mod observability;
 pub mod project_management;

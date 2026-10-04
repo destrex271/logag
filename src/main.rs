@@ -2,7 +2,7 @@ use axum::routing::post;
 use clap::Parser;
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
-use logag::http_response_handler::RecordHTTPResponseHandler;
+use logag::recorder_http_resp_handler::RecordHTTPResponseHandler;
 use logag::observability::Observability;
 use logag::project_management::ProjectManagementService;
 use logag::retrieval_engine::RetrievalEngine;

@@ -266,6 +266,10 @@ pub(crate) mod test_utils {
         ) -> Result<uuid::Uuid, StorageEngineErrors> {
             Ok(uuid::Uuid::nil())
         }
+
+        async fn get_all_project_lanes(&self) -> Result<std::collections::HashMap<uuid::Uuid, String>, StorageEngineErrors> {
+            Ok(std::collections::HashMap::new())
+        }
     }
 }
 
