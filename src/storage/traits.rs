@@ -105,6 +105,11 @@ pub trait StorageEngine: Send + Sync + 'static {
         user_input_id: uuid::Uuid,
         project_lane: uuid::Uuid,
     ) -> Result<LogContent, StorageEngineErrors>;
+    async fn store_project_lane(
+        &self,
+        project_name: String,
+        timestamp: String,
+    ) -> Result<uuid::Uuid, StorageEngineErrors>;
 }
 
 #[cfg(test)]
