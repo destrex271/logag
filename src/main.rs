@@ -1,4 +1,3 @@
-use axum::routing::post;
 use clap::Parser;
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
@@ -59,22 +58,8 @@ async fn main() -> anyhow::Result<()> {
         StreamableHttpServerConfig::default(),
     );
 
-    let http_handler = std::sync::Arc::new(RecordHTTPResponseHandler::new(aggregator));
-    let project_http_handler = std::sync::Arc::new(ProjectHTTPHandler::new(project_mgmt_service));
-
-    let record_router: axum::Router = axum::Router::new()
-        .route(
-            "/record",
-            post(RecordHTTPResponseHandler::handle_post_response),
-        )
-        .with_state(http_handler);
-
-    let project_router: axum::Router = axum::Router::new()
-        .route(
-            "/create_project",
-            post(ProjectHTTPHandler::handle_http_create_project_lane),
-        )
-        .with_state(project_http_handler);
+    let record_router = Arc::new(RecordHTTPResponseHandler::new(aggregator)).router();
+    let project_router = Arc::new(ProjectHTTPHandler::new(project_mgmt_service)).router();
 
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
