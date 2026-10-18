@@ -1,4 +1,5 @@
 use axum::extract::State;
+use axum::routing::post;
 use std::sync::Arc;
 
 use crate::event_aggregator::EventAggregator;
@@ -11,6 +12,15 @@ pub struct RecordHTTPResponseHandler {
 impl RecordHTTPResponseHandler {
     pub fn new(event_aggregator: EventAggregator) -> Self {
         Self { event_aggregator }
+    }
+
+    pub fn router(self: Arc<Self>) -> axum::Router {
+        axum::Router::new()
+            .route(
+                "/record",
+                post(RecordHTTPResponseHandler::handle_post_response),
+            )
+            .with_state(self)
     }
 
     pub async fn handle_post_response(State(handler): State<Arc<Self>>, body: String) -> String {
@@ -41,7 +51,6 @@ mod tests {
     use crate::event_aggregator::EventAggregator;
     use crate::shared_log::agent_recorder::AgentRecorder;
     use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
-    use axum::routing::post;
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     use tower::util::ServiceExt;
@@ -78,10 +87,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_post_response_returns_ok() {
-        let handler = Arc::new(test_handler());
-        let router = axum::Router::new()
-            .route("/record", post(RecordHTTPResponseHandler::handle_post_response))
-            .with_state(handler);
+        let router = Arc::new(test_handler()).router();
 
         let request = axum::http::Request::builder()
             .method("POST")

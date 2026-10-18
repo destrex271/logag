@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::State;
+use axum::routing::post;
 
 use super::service::{ProjectCreatePayload, ProjectManagementService};
 
@@ -13,6 +14,15 @@ impl ProjectHTTPHandler {
         Self {
             project_management_service,
         }
+    }
+
+    pub fn router(self: Arc<Self>) -> axum::Router {
+        axum::Router::new()
+            .route(
+                "/create_project",
+                post(ProjectHTTPHandler::handle_http_create_project_lane),
+            )
+            .with_state(self)
     }
 
     pub async fn handle_http_create_project_lane(
@@ -43,7 +53,6 @@ impl ProjectHTTPHandler {
 mod tests {
     use super::*;
     use crate::shared_log::agent_recorder::test_utils::MockStorageEngine;
-    use axum::routing::post;
     use std::sync::atomic::AtomicUsize;
     use tower::util::ServiceExt;
 
@@ -52,13 +61,7 @@ mod tests {
             store_count: Arc::new(AtomicUsize::new(0)),
         });
         let service = ProjectManagementService::new(Arc::new(engine)).await;
-        let handler = Arc::new(ProjectHTTPHandler::new(service));
-        axum::Router::new()
-            .route(
-                "/create_project",
-                post(ProjectHTTPHandler::handle_http_create_project_lane),
-            )
-            .with_state(handler)
+        Arc::new(ProjectHTTPHandler::new(service)).router()
     }
 
     async fn body_string(response: axum::response::Response) -> String {
