@@ -2,9 +2,9 @@ use axum::routing::post;
 use clap::Parser;
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
-use logag::recorder_http_resp_handler::RecordHTTPResponseHandler;
 use logag::observability::Observability;
-use logag::project_management::ProjectManagementService;
+use logag::project_management::{ProjectHTTPHandler, ProjectManagementService};
+use logag::recorder_http_resp_handler::RecordHTTPResponseHandler;
 use logag::retrieval_engine::RetrievalEngine;
 use logag::storage::traits::{StorageBackendProvider, StorageEngine};
 use rmcp::transport::StreamableHttpServerConfig;
@@ -60,12 +60,27 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let http_handler = std::sync::Arc::new(RecordHTTPResponseHandler::new(aggregator));
+    let project_http_handler = std::sync::Arc::new(ProjectHTTPHandler::new(project_mgmt_service));
+
+    let record_router: axum::Router = axum::Router::new()
+        .route(
+            "/record",
+            post(RecordHTTPResponseHandler::handle_post_response),
+        )
+        .with_state(http_handler);
+
+    let project_router: axum::Router = axum::Router::new()
+        .route(
+            "/create_project",
+            post(ProjectHTTPHandler::handle_http_create_project_lane),
+        )
+        .with_state(project_http_handler);
 
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
         .nest_service("/read_mcp", read_mcp_service)
-        .route("/record", post(RecordHTTPResponseHandler::handle_post_response))
-        .with_state(http_handler);
+        .merge(record_router)
+        .merge(project_router);
     let tcp_listener = tokio::net::TcpListener::bind(MCP_BIND_ADDR).await?;
     tracing::info!("Started HTTP + MCP endpoints at {}", MCP_BIND_ADDR);
     let _ = axum::serve(tcp_listener, router).await;
