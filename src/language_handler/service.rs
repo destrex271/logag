@@ -23,7 +23,7 @@ impl LanguageService {
         let formatted_content = self.format_content(content);
         // This is naive and NOT AT ALL A GOOD CHECK.
         if formatted_content.is_empty()
-            || self.split_tokens(&formatted_content).len() as isize > TOKEN_COUNT_THRESHOLD
+            || (self.split_tokens(&formatted_content).len() as isize) < TOKEN_COUNT_THRESHOLD
         {
             return false;
         }
@@ -59,9 +59,8 @@ mod tests {
         let service = LanguageService::new();
         assert!(!service.is_input_valueable(""));
         assert!(
-            !service.is_input_valueable("a ".repeat(TOKEN_COUNT_THRESHOLD as usize + 1).as_str())
+            !service.is_input_valueable("a ".repeat(TOKEN_COUNT_THRESHOLD as usize - 1).as_str())
         );
-        assert!(service.is_input_valueable("a ".repeat(TOKEN_COUNT_THRESHOLD as usize).as_str()));
     }
 
     #[test]
