@@ -52,6 +52,18 @@ function install_for_codex() {
 
     echo "Installed hooks for logag."
     echo "Next step: run \`/hooks\` inside Codex and trust the store_turn.py hooks so they are allowed to run."
+
+    echo "Installing logag MCP servers..."
+    if command -v codex >/dev/null 2>&1; then
+        codex mcp add logag --url http://127.0.0.1:8000/mcp 2>&1 || true
+        codex mcp add logag-read --url http://127.0.0.1:8000/read_mcp 2>&1 || true
+        echo "MCP servers installed."
+    else
+        echo "Warning: 'codex' command not found. Skipping MCP installation."
+        echo "You can manually add them with:"
+        echo "  codex mcp add logag --url http://127.0.0.1:8000/mcp"
+        echo "  codex mcp add logag-read --url http://127.0.0.1:8000/read_mcp"
+    fi
 }
 
 function install_for_claude() {
