@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use rmcp::{handler::server::wrapper::Parameters, tool_router};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
 
+#[derive(Clone)]
 pub struct ProjectManagementService {
     storage: Arc<Box<dyn StorageEngine>>,
 }
@@ -33,6 +35,21 @@ impl ProjectManagementService {
             Ok(uuid) => Ok(uuid),
             Err(err) => panic!("Failed to create project lane: {:?}", err),
         }
+    }
+}
+
+#[tool_router(server_handler)]
+impl ProjectManagementService{
+    pub fn create_project_by_agent(
+        &self,
+        Parameters(
+            ProjectCreatePayload { project_name, timestamp }
+        ): Parameters<ProjectCreatePayload>,
+    ) -> String {
+        let value = tokio::runtime::Handle::current().block_on(async {
+            return self.create_new_project_lane(project_name, timestamp).await.unwrap();
+        });
+        return value.to_string();
     }
 }
 
