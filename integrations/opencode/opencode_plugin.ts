@@ -31,7 +31,7 @@ function parseTomlProjectId(content: string): string | null {
   return null;
 }
 
-function getOrCreateProjectId(): string {
+function getProjectId(): string {
   if (cachedProjectId) {
     return cachedProjectId;
   }
@@ -57,7 +57,7 @@ function getOrCreateProjectId(): string {
 
 export default (async () => {
   try {
-    getOrCreateProjectId();
+    getProjectId();
   } catch (e) {
     // Will be enforced on interaction
   }
@@ -65,7 +65,7 @@ export default (async () => {
   return {
     "chat.message": async (input, output) => {
       try {
-        getOrCreateProjectId();
+        getProjectId();
       } catch (e: any) {
         console.error(e.message || e);
         throw e;
@@ -91,7 +91,7 @@ export default (async () => {
 
     "event": async ({ event }) => {
       try {
-        getOrCreateProjectId();
+        getProjectId();
       } catch (e: any) {
         console.error(e.message || e);
         // Don't throw from event handler to avoid breaking flow
@@ -117,7 +117,7 @@ function sendPair(sessionID: string, userInput: string, agentOutput: string) {
 
   let projectId: string;
   try {
-    projectId = getOrCreateProjectId();
+    projectId = getProjectId();
   } catch (e: any) {
     console.error(e.message || e);
     throw e;

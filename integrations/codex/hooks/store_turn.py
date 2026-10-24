@@ -43,7 +43,7 @@ def _parse_project_id_from_toml(content: str):
     return None
 
 
-def get_or_create_project_id():
+def get_project_id():
     global _cached_project_id
     if _cached_project_id:
         return _cached_project_id
@@ -74,7 +74,7 @@ class EventDispatcher:
         self._post({"userInput": user_input, "agentOutput": agent_output})
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
-        project_id = get_or_create_project_id()
+        project_id = get_project_id()
         if project_id:
             payload["projectLane"] = project_id
             payload["projectId"] = project_id
@@ -110,7 +110,7 @@ def handle_user_prompt_submit(payload: dict[str, Any]) -> None:
         return
 
     try:
-        get_or_create_project_id()
+        get_project_id()
     except Exception as e:
         print(str(e), file=sys.stderr)
         raise
@@ -132,7 +132,7 @@ def handle_stop(payload: dict[str, Any]) -> None:
         return
 
     try:
-        get_or_create_project_id()
+        get_project_id()
     except Exception as e:
         print(str(e), file=sys.stderr)
         raise
