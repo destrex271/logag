@@ -131,8 +131,6 @@ function sendPair(sessionID: string, userInput: string, agentOutput: string) {
       userInput, 
       agentOutput: cleanAgentOutput,
       projectLane: projectId,
-      projectId: projectId,
-      project_id: projectId,
     }),
   }).catch((err) => {
     console.error("Translation Server Offline:", err.message);
