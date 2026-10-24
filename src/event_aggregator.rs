@@ -59,18 +59,18 @@ impl EventAggregator {
             project_lane,
         }): Parameters<MCPEvent>,
     ) -> String {
-        let project_lane_uuid = uuid::Uuid::from_str(&project_lane).unwrap_or_else(|_| uuid::Uuid::nil());
+        let project_lane_uuid =
+            uuid::Uuid::from_str(&project_lane).unwrap_or_else(|_| uuid::Uuid::nil());
         let formatted_content = self.lang_service.format_content(&content);
-        self.shared_log
-            .append_event(
-                self.event_factory.create_log_event(
-                    formatted_content,
-                    unix_epoch_timestamp,
-                    event_type,
-                    project_lane_uuid,
-                ),
+        self.shared_log.append_event(
+            self.event_factory.create_log_event(
+                formatted_content,
+                unix_epoch_timestamp,
+                event_type,
                 project_lane_uuid,
-            );
+            ),
+            project_lane_uuid,
+        );
         tracing::info!("{:?}", agent_notes);
         tracing::info!(agent_notes = %agent_notes, "add_event called");
         "success".to_string()
@@ -83,7 +83,8 @@ impl EventAggregator {
         unix_epoch_timestamp: String,
         project_lane: String,
     ) -> String {
-        let project_lane_uuid = uuid::Uuid::from_str(&project_lane).unwrap_or_else(|_| uuid::Uuid::nil());
+        let project_lane_uuid =
+            uuid::Uuid::from_str(&project_lane).unwrap_or_else(|_| uuid::Uuid::nil());
         // Verify if the content from user is event useful to store as a dedicated user event.
         if !self.lang_service.is_input_valueable(&user_content)
             || !self.lang_service.is_input_valueable(&agent_content)

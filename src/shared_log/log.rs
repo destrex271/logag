@@ -51,7 +51,12 @@ impl LogContent {
 }
 
 impl LogEvent {
-    pub fn new(event_type: EventType, content: String, timestamp: String, project_lane: uuid::Uuid) -> Self {
+    pub fn new(
+        event_type: EventType,
+        content: String,
+        timestamp: String,
+        project_lane: uuid::Uuid,
+    ) -> Self {
         let content = LogContent::new(content);
         let seconds = timestamp.parse::<isize>().unwrap();
         let id = uuid::Uuid::new_v7(Timestamp::from_unix_time(seconds as u64, 0, 0, 0));

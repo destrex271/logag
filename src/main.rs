@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         StreamableHttpServerConfig::default(),
     );
     let project_management_mcp = StreamableHttpService::new(
-        move || Ok(project_mgmt_service.clone()), 
+        move || Ok(project_mgmt_service.clone()),
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
