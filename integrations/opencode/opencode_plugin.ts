@@ -64,8 +64,15 @@ export default (async () => {
     "chat.message": async (input, output) => {
       const projectId = getProjectId();
       if (projectId === "__MISSING_PROJECT_ID__") {
-        console.error(getProjectIdMessage());
-        output.parts.push({ type: "text", text: getProjectIdMessage() } as any);
+        const msg = getProjectIdMessage();
+        console.error(msg);
+        try {
+          if (output.parts) {
+            output.parts.push({ type: "text", text: msg } as any);
+          }
+        } catch (e) {
+          // ignore
+        }
         return;
       }
       const sessionID = input.sessionID;
@@ -91,7 +98,6 @@ export default (async () => {
       const projectId = getProjectId();
       if (projectId === "__MISSING_PROJECT_ID__") {
         console.error(getProjectIdMessage());
-        // Don't block events, just log message for agent instruction
         return;
       }
       if (event.type === "message.part.updated") {
