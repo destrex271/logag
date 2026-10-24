@@ -52,23 +52,21 @@ function getProjectId(): string {
     }
   }
 
-  throw new Error("A project name is required to work with logag -> ask the user for a project name");
+  return "__MISSING_PROJECT_ID__";
+}
+
+function getProjectIdMessage(): string {
+  return "A project name is required to work with logag -> ask the user for a project name. Once you have the project name, create a logag_config.toml file in the current working directory with `project-id = \"<uuid>\"` by using the create_project functionality via MCP if available, or ask the user to provide the project ID.";
 }
 
 export default (async () => {
-  try {
-    getProjectId();
-  } catch (e) {
-    // Will be enforced on interaction
-  }
-  
   return {
     "chat.message": async (input, output) => {
-      try {
-        getProjectId();
-      } catch (e: any) {
-        console.error(e.message || e);
-        throw e;
+      const projectId = getProjectId();
+      if (projectId === "__MISSING_PROJECT_ID__") {
+        console.error(getProjectIdMessage());
+        output.parts.push({ type: "text", text: getProjectIdMessage() } as any);
+        return;
       }
       const sessionID = input.sessionID;
       const userText = output.parts
@@ -90,11 +88,11 @@ export default (async () => {
     },
 
     "event": async ({ event }) => {
-      try {
-        getProjectId();
-      } catch (e: any) {
-        console.error(e.message || e);
-        // Don't throw from event handler to avoid breaking flow
+      const projectId = getProjectId();
+      if (projectId === "__MISSING_PROJECT_ID__") {
+        console.error(getProjectIdMessage());
+        // Don't block events, just log message for agent instruction
+        return;
       }
       if (event.type === "message.part.updated") {
         const props = event.properties as any;
@@ -115,12 +113,10 @@ function sendPair(sessionID: string, userInput: string, agentOutput: string) {
     ? agentOutput.slice(userInput.length)
     : agentOutput;
 
-  let projectId: string;
-  try {
-    projectId = getProjectId();
-  } catch (e: any) {
-    console.error(e.message || e);
-    throw e;
+  const projectId = getProjectId();
+  if (projectId === "__MISSING_PROJECT_ID__") {
+    console.error(getProjectIdMessage());
+    return;
   }
 
   fetch(LOGAG_RECORD_URL, {
