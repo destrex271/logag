@@ -339,10 +339,9 @@ class EventDispatcherTest(unittest.TestCase):
         request = captured["request"]
         self.assertEqual(request.full_url, "http://localhost:8000/record")
         self.assertEqual(request.method, "POST")
-        self.assertEqual(
-            json.loads(request.data),
-            {"userInput": "Why is it slow?", "agentOutput": "N+1 queries"},
-        )
+        payload = json.loads(request.data)
+        self.assertEqual(payload.get("userInput"), "Why is it slow?")
+        self.assertEqual(payload.get("agentOutput"), "N+1 queries")
         content_type = next(
             value for key, value in request.headers.items()
             if key.lower() == "content-type"

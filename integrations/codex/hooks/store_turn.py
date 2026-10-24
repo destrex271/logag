@@ -29,8 +29,105 @@ from typing import Any
 from urllib.request import Request, urlopen
 
 LOGAG_URL = "http://localhost:8000/record"
+CREATE_PROJECT_URL = "http://localhost:8000/create_project"
+LOGAG_CONFIG_FILE = "logag_config.toml"
 
 STATE_DIR = Path(tempfile.gettempdir()) / "logag"
+
+_cached_project_id = None
+
+
+def _get_cwd():
+    try:
+        return os.getcwd()
+    except Exception:
+        return "."
+
+
+def _parse_project_id_from_toml(content: str):
+    # Try to find project-id or project_id
+    for line in content.splitlines():
+        # Skip comments
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        if 'project' in stripped.lower() and '=' in stripped:
+            # Extract value
+            parts = stripped.split('=', 1)
+            if len(parts) != 2:
+                continue
+            value = parts[1].strip()
+            # Remove comments
+            if '#' in value:
+                value = value.split('#')[0].strip()
+            # Remove quotes
+            value = value.strip('"').strip("'")
+            if value:
+                return value
+    return None
+
+
+def get_or_create_project_id():
+    global _cached_project_id
+    if _cached_project_id:
+        return _cached_project_id
+
+    cwd = _get_cwd()
+    config_path = Path(cwd) / LOGAG_CONFIG_FILE
+
+    # Check if config exists
+    if config_path.exists():
+        try:
+            content = config_path.read_text(encoding='utf-8')
+            project_id = _parse_project_id_from_toml(content)
+            if project_id:
+                _cached_project_id = project_id
+                return _cached_project_id
+        except Exception:
+            pass
+
+    # Create project
+    project_name = Path(cwd).name or "project"
+    try:
+        payload = json.dumps({
+            "projectName": project_name,
+            "timestamp": str(int(__import__('time').time() * 1000))
+        }).encode('utf-8')
+        req = Request(CREATE_PROJECT_URL, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urlopen(req, timeout=10) as response:
+                body = response.read()
+                project_id = body.decode('utf-8').strip().strip('"')
+        except Exception as e:
+            project_id = ""
+
+        if project_id:
+            _cached_project_id = project_id
+            try:
+                config_content = f'project-id = "{project_id}"\n'
+                config_path.write_text(config_content, encoding='utf-8')
+                try:
+                    os.chmod(config_path, 0o600)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            return _cached_project_id
+    except Exception:
+        pass
+
+    # Try reading again in case created elsewhere
+    if config_path.exists():
+        try:
+            content = config_path.read_text(encoding='utf-8')
+            project_id = _parse_project_id_from_toml(content)
+            if project_id:
+                _cached_project_id = project_id
+                return _cached_project_id
+        except Exception:
+            pass
+
+    return _cached_project_id or ""
 
 
 class EventDispatcher:
@@ -43,6 +140,12 @@ class EventDispatcher:
         self._post({"userInput": user_input, "agentOutput": agent_output})
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        # Add project id
+        project_id = get_or_create_project_id()
+        if project_id:
+            payload["projectLane"] = project_id
+            payload["projectId"] = project_id
+            payload["project_id"] = project_id
         request = Request(
             self.url,
             data=json.dumps(payload).encode("utf-8"),
@@ -80,6 +183,9 @@ def handle_user_prompt_submit(payload: dict[str, Any]) -> None:
     if not session_id or not turn_id or not prompt:
         return
 
+    # Initialize/get project id on init/interaction
+    get_or_create_project_id()
+
     STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     # Unique per submission: concurrent agents sharing this session/turn
     # never collide on the same file.
@@ -97,6 +203,9 @@ def handle_stop(payload: dict[str, Any]) -> None:
     last_assistant_message = payload.get("last_assistant_message")
     if not session_id or not turn_id or not last_assistant_message:
         return
+
+    # Ensure project id exists before sending
+    get_or_create_project_id()
 
     pending = _pending_state_files(session_id, turn_id)
     if not pending:
