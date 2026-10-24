@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 use schemars::JsonSchema;
@@ -41,7 +41,10 @@ impl RetrievalEngine {
     #[tool(description = "Get latest agent output that was stored for similar user query.")]
     pub fn get_cached_agent_response(
         &self,
-        Parameters(ReadQuery { content, project_lane }): Parameters<ReadQuery>,
+        Parameters(ReadQuery {
+            content,
+            project_lane,
+        }): Parameters<ReadQuery>,
     ) -> String {
         let project_lane_uuid = Uuid::from_str(&project_lane).unwrap_or_else(|_| Uuid::nil());
         let formatted_content = self.lang_service.format_content(&content);

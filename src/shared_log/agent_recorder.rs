@@ -149,7 +149,9 @@ impl SharedLog for AgentRecorder {
         let handle = Handle::current();
         let result: Result<SlimUserEmbeddingInput, StorageEngineErrors> =
             tokio::task::block_in_place(|| {
-                handle.block_on(engine.get_similar_user_input_embedding(embeddings_data, project_lane))
+                handle.block_on(
+                    engine.get_similar_user_input_embedding(embeddings_data, project_lane),
+                )
             });
 
         match result {
@@ -267,7 +269,9 @@ pub(crate) mod test_utils {
             Ok(uuid::Uuid::nil())
         }
 
-        async fn get_all_project_lanes(&self) -> Result<std::collections::HashMap<uuid::Uuid, String>, StorageEngineErrors> {
+        async fn get_all_project_lanes(
+            &self,
+        ) -> Result<std::collections::HashMap<uuid::Uuid, String>, StorageEngineErrors> {
             Ok(std::collections::HashMap::new())
         }
     }
