@@ -2,7 +2,7 @@ use clap::Parser;
 use logag::event_aggregator::EventAggregator;
 use logag::global_config::GlobalConfig;
 use logag::observability::Observability;
-use logag::project_management::{ProjectHTTPHandler, ProjectManagementService};
+use logag::project_management::ProjectManagementService;
 use logag::recorder_http_resp_handler::RecordHTTPResponseHandler;
 use logag::retrieval_engine::RetrievalEngine;
 use logag::storage::traits::{StorageBackendProvider, StorageEngine};
@@ -57,15 +57,19 @@ async fn main() -> anyhow::Result<()> {
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
+    let project_management_mcp = StreamableHttpService::new(
+        move || Ok(project_mgmt_service.clone()), 
+        LocalSessionManager::default().into(),
+        StreamableHttpServerConfig::default(),
+    );
 
     let record_router = Arc::new(RecordHTTPResponseHandler::new(aggregator)).router();
-    let project_router = Arc::new(ProjectHTTPHandler::new(project_mgmt_service)).router();
 
     let router: axum::Router = axum::Router::new()
         .nest_service("/mcp", mcp_service)
         .nest_service("/read_mcp", read_mcp_service)
-        .merge(record_router)
-        .merge(project_router);
+        .nest_service("/project_management", project_management_mcp)
+        .merge(record_router);
     let tcp_listener = tokio::net::TcpListener::bind(MCP_BIND_ADDR).await?;
     tracing::info!("Started HTTP + MCP endpoints at {}", MCP_BIND_ADDR);
     let _ = axum::serve(tcp_listener, router).await;
