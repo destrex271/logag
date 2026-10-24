@@ -53,7 +53,7 @@ impl ProjectManagementService {
                 .await
                 .unwrap();
         });
-        return value.to_string();
+        value.to_string()
     }
 }
 
