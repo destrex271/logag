@@ -77,8 +77,6 @@ class EventDispatcher:
         project_id = get_project_id()
         if project_id:
             payload["projectLane"] = project_id
-            payload["projectId"] = project_id
-            payload["project_id"] = project_id
         request = Request(
             self.url,
             data=json.dumps(payload).encode("utf-8"),
