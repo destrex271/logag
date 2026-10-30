@@ -59,20 +59,26 @@ function getProjectIdMessage(): string {
   return "A project name is required to work with logag -> ask the user for a project name. Once you have the project name, create a logag_config.toml file in the current working directory with `project-id = \"<uuid>\"` by using the create_project functionality via MCP if available, or ask the user to provide the project ID.";
 }
 
+function appendTextPart(output: any, text: string) {
+  const message = output?.message;
+  if (!Array.isArray(output?.parts) || !message?.id || !message?.sessionID) {
+    return;
+  }
+  output.parts.push({
+    id: `prt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+    sessionID: message.sessionID,
+    messageID: message.id,
+    type: "text",
+    text,
+  });
+}
+
 export default (async () => {
   return {
     "chat.message": async (input, output) => {
       const projectId = getProjectId();
       if (projectId === "__MISSING_PROJECT_ID__") {
-        const msg = getProjectIdMessage();
-        console.error(msg);
-        try {
-          if (output.parts) {
-            output.parts.push({ type: "text", text: msg } as any);
-          }
-        } catch (e) {
-          // ignore
-        }
+        appendTextPart(output, getProjectIdMessage());
         return;
       }
       const sessionID = input.sessionID;
@@ -84,7 +90,7 @@ export default (async () => {
       const prev = sessions.get(sessionID);
 
       if (prev?.userInput && prev.assistantOutput) {
-        sendPair(sessionID, prev.userInput, prev.assistantOutput);
+        sendPair(sessionID, prev.userInput, prev.assistantOutput, output);
       }
 
       sessions.set(sessionID, {
@@ -97,7 +103,6 @@ export default (async () => {
     "event": async ({ event }) => {
       const projectId = getProjectId();
       if (projectId === "__MISSING_PROJECT_ID__") {
-        console.error(getProjectIdMessage());
         return;
       }
       if (event.type === "message.part.updated") {
@@ -114,14 +119,13 @@ export default (async () => {
   };
 }) satisfies Plugin;
 
-function sendPair(sessionID: string, userInput: string, agentOutput: string) {
+function sendPair(sessionID: string, userInput: string, agentOutput: string, output?: any) {
   const cleanAgentOutput = agentOutput.startsWith(userInput)
     ? agentOutput.slice(userInput.length)
     : agentOutput;
 
   const projectId = getProjectId();
   if (projectId === "__MISSING_PROJECT_ID__") {
-    console.error(getProjectIdMessage());
     return;
   }
 
@@ -135,6 +139,7 @@ function sendPair(sessionID: string, userInput: string, agentOutput: string) {
       projectLane: projectId,
     }),
   }).catch((err) => {
-    console.error("Translation Server Offline:", err.message);
+    const msg = `Translation Server Offline: ${err.message}. LogAg server may not be running at ${LOGAG_RECORD_URL}`;
+    appendTextPart(output, `\n[LOGAG ERROR] ${msg}\n`);
   });
 }

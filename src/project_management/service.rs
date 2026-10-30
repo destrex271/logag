@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use rmcp::{handler::server::wrapper::Parameters, tool_router};
+use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::storage::traits::{StorageEngine, StorageEngineErrors};
@@ -10,7 +11,7 @@ pub struct ProjectManagementService {
     storage: Arc<Box<dyn StorageEngine>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectCreatePayload {
     pub project_name: String,
@@ -40,6 +41,10 @@ impl ProjectManagementService {
 
 #[tool_router(server_handler)]
 impl ProjectManagementService {
+    #[tool(
+        name = "create_project_lane",
+        description = "Create a logag project lane and return its project ID"
+    )]
     pub fn create_project_by_agent(
         &self,
         Parameters(ProjectCreatePayload {
