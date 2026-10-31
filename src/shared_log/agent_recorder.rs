@@ -52,7 +52,9 @@ impl SharedLog for AgentRecorder {
         let storage = self.storage.clone();
         let handle = tokio::spawn(async move {
             if let Some(engine) = storage.get() {
-                let _ = engine.store_event(event.as_ref(), project_lane).await;
+                if let Err(err) = engine.store_event(event.as_ref(), project_lane).await {
+                    tracing::error!("unable to store event: {:?}", err);
+                }
             }
         });
         tokio::task::block_in_place(|| {
@@ -92,9 +94,12 @@ impl SharedLog for AgentRecorder {
             tracing::info!("inserting user embeddings for event id: {}", user_event_id);
             // Store embeddings.
             if let Some(engine) = storage.get() {
-                let _ = engine
+                if let Err(err) = engine
                     .store_user_input_embedding(user_event_id, &embeddings.unwrap(), project_lane)
-                    .await;
+                    .await
+                {
+                    tracing::error!("unable to store user input embedding: {:?}", err);
+                }
             } else {
                 tracing::error!("unable to use storage engine.");
                 return;
@@ -109,9 +114,12 @@ impl SharedLog for AgentRecorder {
                 user_event_id
             );
             if let Some(engine) = storage.get() {
-                let _ = engine
+                if let Err(err) = engine
                     .store_cached_agent_response(agent_event_id, user_event_id, project_lane)
-                    .await;
+                    .await
+                {
+                    tracing::error!("unable to store cached agent response: {:?}", err);
+                }
             }
             tracing::info!("inserted agent output.")
         });

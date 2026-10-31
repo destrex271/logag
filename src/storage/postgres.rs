@@ -167,7 +167,7 @@ impl StorageEngine for PostgresStorage {
         let query = sqlx::query(
             r#"
             WITH closest_matches AS (
-                SELECT user_event_id FROM UserInputEmbedding WHERE project_lane = $2 ORDER BY embedding <~> $1::vector ASC LIMIT 1
+                SELECT user_event_id FROM UserInputEmbedding WHERE project_lane = $2 ORDER BY embedding <=> $1::vector ASC LIMIT 1
             )
             SELECT * FROM closest_matches ORDER BY user_event_id DESC;
             "#,
@@ -265,9 +265,10 @@ impl StorageEngine for PostgresStorage {
         let uuid = uuid::Uuid::new_v7(Timestamp::from_unix_time(seconds as u64, 0, 0, 0));
         sqlx::query(
             r#"
-            INSERT INTO ProjectLane (name) VALUES ($1)
+            INSERT INTO ProjectLane (id, name) VALUES ($1, $2)
             "#,
         )
+        .bind(uuid)
         .bind(project_name)
         .execute(&mut *connection)
         .await

@@ -43,21 +43,19 @@ impl ProjectManagementService {
 impl ProjectManagementService {
     #[tool(
         name = "create_project_lane",
-        description = "Create a logag project lane and return its project ID"
+        description = "Create a logag project lane and return its project ID. Timestamp should be an epoch timestamp and project name should be a non-space string."
     )]
-    pub fn create_project_by_agent(
+    pub async fn create_project_by_agent(
         &self,
         Parameters(ProjectCreatePayload {
             project_name,
             timestamp,
         }): Parameters<ProjectCreatePayload>,
     ) -> String {
-        let value = tokio::runtime::Handle::current().block_on(async {
-            return self
-                .create_new_project_lane(project_name, timestamp)
-                .await
-                .unwrap();
-        });
+        let value = self
+            .create_new_project_lane(project_name, timestamp)
+            .await
+            .unwrap();
         value.to_string()
     }
 }

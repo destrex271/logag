@@ -45,7 +45,7 @@ def _parse_project_id_from_toml(content: str):
 
 
 def get_project_id_message():
-    return "A project name is required to work with logag -> ask the user for a project name. Once you have the project name, create a logag_config.toml file in the current working directory with `project-id = \"<uuid>\"` by using the create_project functionality via MCP if available, or ask the user to provide the project ID."
+    return "A LogAg project id is required. Create `logag_config.toml` in the project root (the directory the harness is working in, not a subdirectory) with `project-id = \"<uuid>\"`. Get the UUID by calling `create_project_lane` from the `logag-project` MCP server, or ask the user for their existing project id. The hook reads this file from the project root to tag recorded events."
 
 
 def get_project_id():

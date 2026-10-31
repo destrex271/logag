@@ -4,14 +4,13 @@ import * as path from "path";
 
 const LOGAG_CONFIG_FILE = "logag_config.toml";
 const LOGAG_RECORD_URL = "http://localhost:8000/record";
+const MISSING_PROJECT_ID = "__MISSING_PROJECT_ID__";
 
 const sessions = new Map<string, {
   userInput: string;
   lastUserMessageID: string;
   assistantOutput: string;
 }>();
-
-let cachedProjectId: string | null = null;
 
 function getCwd(): string {
   try {
@@ -31,28 +30,17 @@ function parseTomlProjectId(content: string): string | null {
   return null;
 }
 
-function getProjectId(): string {
-  if (cachedProjectId) {
-    return cachedProjectId;
+function projectIdFromDir(dir: string): string | null {
+  const configPath = path.join(dir, LOGAG_CONFIG_FILE);
+  if (!fs.existsSync(configPath)) {
+    return null;
   }
-
-  const cwd = getCwd();
-  const configPath = path.join(cwd, LOGAG_CONFIG_FILE);
-
-  if (fs.existsSync(configPath)) {
-    try {
-      const content = fs.readFileSync(configPath, "utf-8");
-      const projectId = parseTomlProjectId(content);
-      if (projectId) {
-        cachedProjectId = projectId;
-        return cachedProjectId;
-      }
-    } catch (e) {
-      // ignore
-    }
+  try {
+    const content = fs.readFileSync(configPath, "utf-8");
+    return parseTomlProjectId(content);
+  } catch {
+    return null;
   }
-
-  return "__MISSING_PROJECT_ID__";
 }
 
 function getProjectIdMessage(): string {
@@ -73,11 +61,50 @@ function appendTextPart(output: any, text: string) {
   });
 }
 
-export default (async () => {
+export default (async (input) => {
+  const projectDirs = [input?.directory, input?.worktree, getCwd()].filter(
+    (dir, index, all): dir is string => Boolean(dir) && all.indexOf(dir) === index
+  );
+
+  function getProjectId(): string {
+    for (const dir of projectDirs) {
+      const projectId = projectIdFromDir(dir);
+      if (projectId) {
+        return projectId;
+      }
+    }
+    return MISSING_PROJECT_ID;
+  }
+
+  function sendPair(sessionID: string, userInput: string, agentOutput: string, output?: any) {
+    const cleanAgentOutput = agentOutput.startsWith(userInput)
+      ? agentOutput.slice(userInput.length)
+      : agentOutput;
+
+    const projectId = getProjectId();
+    if (projectId === MISSING_PROJECT_ID) {
+      return;
+    }
+
+    fetch(LOGAG_RECORD_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: sessionID,
+        userInput,
+        agentOutput: cleanAgentOutput,
+        projectLane: projectId,
+      }),
+    }).catch((err) => {
+      const msg = `Translation Server Offline: ${err.message}. LogAg server may not be running at ${LOGAG_RECORD_URL}`;
+      appendTextPart(output, `\n[LOGAG ERROR] ${msg}\n`);
+    });
+  }
+
   return {
     "chat.message": async (input, output) => {
       const projectId = getProjectId();
-      if (projectId === "__MISSING_PROJECT_ID__") {
+      if (projectId === MISSING_PROJECT_ID) {
         appendTextPart(output, getProjectIdMessage());
         return;
       }
@@ -102,7 +129,7 @@ export default (async () => {
 
     "event": async ({ event }) => {
       const projectId = getProjectId();
-      if (projectId === "__MISSING_PROJECT_ID__") {
+      if (projectId === MISSING_PROJECT_ID) {
         return;
       }
       if (event.type === "message.part.updated") {
@@ -118,28 +145,3 @@ export default (async () => {
     },
   };
 }) satisfies Plugin;
-
-function sendPair(sessionID: string, userInput: string, agentOutput: string, output?: any) {
-  const cleanAgentOutput = agentOutput.startsWith(userInput)
-    ? agentOutput.slice(userInput.length)
-    : agentOutput;
-
-  const projectId = getProjectId();
-  if (projectId === "__MISSING_PROJECT_ID__") {
-    return;
-  }
-
-  fetch(LOGAG_RECORD_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      sessionId: sessionID, 
-      userInput, 
-      agentOutput: cleanAgentOutput,
-      projectLane: projectId,
-    }),
-  }).catch((err) => {
-    const msg = `Translation Server Offline: ${err.message}. LogAg server may not be running at ${LOGAG_RECORD_URL}`;
-    appendTextPart(output, `\n[LOGAG ERROR] ${msg}\n`);
-  });
-}

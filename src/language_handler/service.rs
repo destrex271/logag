@@ -1,6 +1,6 @@
 use regex::Regex;
 
-const TOKEN_COUNT_THRESHOLD: isize = 30;
+const TOKEN_COUNT_THRESHOLD: isize = 2;
 
 pub struct LanguageService {
     word_split_regex: Regex,
