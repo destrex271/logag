@@ -15,7 +15,7 @@ LogAg acts as a memory backend for [Codex](https://developers.openai.com/codex/)
 cargo run --release -- --config-path config/config.toml
 ```
 
-This starts MCP endpoints at `http://127.0.0.1:8000/mcp` and `http://127.0.0.1:8000/read_mcp`, and the recording endpoint at `http://127.0.0.1:8000/record`.
+This starts MCP endpoints at `http://127.0.0.1:8000/mcp`, `http://127.0.0.1:8000/read_mcp`, and `http://127.0.0.1:8000/project_management`, and the recording endpoint at `http://127.0.0.1:8000/record`.
 
 ### 2. Configure Codex MCP servers
 
@@ -27,6 +27,9 @@ url = "http://127.0.0.1:8000/mcp"
 
 [mcp_servers.logag-read]
 url = "http://127.0.0.1:8000/read_mcp"
+
+[mcp_servers.logag-project]
+url = "http://127.0.0.1:8000/project_management"
 ```
 
 or register them with the CLI:
@@ -34,14 +37,16 @@ or register them with the CLI:
 ```bash
 codex mcp add logag --url http://127.0.0.1:8000/mcp
 codex mcp add logag-read --url http://127.0.0.1:8000/read_mcp
+codex mcp add logag-project --url http://127.0.0.1:8000/project_management
 ```
 
-Two MCP servers are registered:
+Three MCP servers are registered:
 
 | Server | Endpoint | Purpose |
 |--------|----------|---------|
 | `logag` | `/mcp` | Recording events (`logag_add_event`) |
 | `logag-read` | `/read_mcp` | Retrieving cached responses (`get_cached_agent_response`) |
+| `logag-project` | `/project_management` | Creating project lanes (`create_project_lane`) |
 
 ### 3. Add AGENTS.md
 
@@ -119,6 +124,7 @@ Codex session
 |------|--------|-------------|
 | `logag_add_event` | `logag` | Register a user/agent/thinking event |
 | `logag-read_get_cached_agent_response` | `logag-read` | Retrieve cached agent output for a similar user query |
+| `create_project_lane` | `logag-project` | Create a project lane and return its project ID |
 
 ## Extending to Other Tools
 
@@ -126,4 +132,4 @@ The same pattern applies to other MCP-compatible tools (Claude, etc.):
 
 1. **Record** — send user/agent pairs to `POST /record`
 2. **Retrieve** — call `get_cached_agent_response` via the `logag-read` MCP server
-3. **Configure** — register both MCP endpoints in that tool's MCP client config
+3. **Configure** — register all three MCP endpoints in that tool's MCP client config

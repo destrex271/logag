@@ -85,7 +85,7 @@ To integrate another tool (Claude, etc.):
 
 1. **Record** — send user/agent pairs to `POST /record`
 2. **Retrieve** — call `get_cached_agent_response` via the `logag-read` MCP server
-3. **Configure** — register both MCP endpoints in that tool's MCP client config
+3. **Configure** — register all three MCP endpoints in that tool's MCP client config
 
 ### Data Flow
 
@@ -117,6 +117,7 @@ LogAg exposes two interfaces:
 |------|-------------|
 | `logag_add_event` | Register a user/agent/thinking event - Not recommended since plugin based reads are more reliable and controllable |
 | `logag-read_get_cached_agent_response` | Retrieve cached agent output for a similar user query |
+| `create_project_lane` | Create a project lane and return its project ID |
 
 ## Configuration
 

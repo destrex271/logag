@@ -15,7 +15,7 @@ LogAg acts as a memory backend for [Opencode](https://opencode.ai). Record user/
 cargo run --release -- --config-path config/config.toml
 ```
 
-This starts MCP endpoints at `http://127.0.0.1:8000/mcp` and `http://127.0.0.1:8000/read_mcp`.
+This starts MCP endpoints at `http://127.0.0.1:8000/mcp`, `http://127.0.0.1:8000/read_mcp`, and `http://127.0.0.1:8000/project_management`.
 
 ### 2. Configure Opencode
 
@@ -33,17 +33,22 @@ Edit `~/.config/opencode/opencode.json`:
     "logag-read": {
       "type": "remote",
       "url": "http://127.0.0.1:8000/read_mcp"
+    },
+    "logag-project": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8000/project_management"
     }
   }
 }
 ```
 
-Two MCP servers are registered:
+Three MCP servers are registered:
 
 | Server | Endpoint | Purpose |
 |--------|----------|---------|
 | `logag` | `/mcp` | Recording events (`logag_add_event`) |
 | `logag-read` | `/read_mcp` | Retrieving cached responses (`get_cached_agent_response`) |
+| `logag-project` | `/project_management` | Creating project lanes (`create_project_lane`) |
 
 ### 3. Add AGENTS.md
 
@@ -99,6 +104,7 @@ Opencode session
 |------|--------|-------------|
 | `logag_add_event` | `logag` | Register a user/agent/thinking event |
 | `logag-read_get_cached_agent_response` | `logag-read` | Retrieve cached agent output for a similar user query |
+| `create_project_lane` | `logag-project` | Create a project lane and return its project ID |
 
 ## Extending to Other Tools
 
@@ -106,4 +112,4 @@ The same pattern applies to other MCP-compatible tools (Claude, Codex, etc.):
 
 1. **Record** — send user/agent pairs to `POST /record`
 2. **Retrieve** — call `get_cached_agent_response` via the `logag-read` MCP server
-3. **Configure** — register both MCP endpoints in that tool's MCP client config
+3. **Configure** — register all three MCP endpoints in that tool's MCP client config

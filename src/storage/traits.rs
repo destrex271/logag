@@ -1,4 +1,4 @@
-use std::{error::Error, str::FromStr};
+use std::{collections::HashMap, error::Error, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -78,25 +78,41 @@ pub trait StorageEngine: Send + Sync + 'static {
     async fn load_storage(config: GlobalConfig) -> Self
     where
         Self: Sized;
-    async fn store_event(&self, event: &dyn Event) -> Result<(), StorageEngineErrors>;
+    async fn store_event(
+        &self,
+        event: &dyn Event,
+        project_lane: uuid::Uuid,
+    ) -> Result<(), StorageEngineErrors>;
     async fn store_user_input_embedding(
         &self,
         user_event_id: uuid::Uuid,
         embedding: &[f32],
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors>;
     async fn store_cached_agent_response(
         &self,
         log_event_id: uuid::Uuid,
         user_query_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<(), StorageEngineErrors>;
     async fn get_similar_user_input_embedding(
         &self,
         embedding: Vec<f32>,
+        project_lane: uuid::Uuid,
     ) -> Result<SlimUserEmbeddingInput, StorageEngineErrors>;
     async fn get_agent_output_for_user_input(
         &self,
         user_input_id: uuid::Uuid,
+        project_lane: uuid::Uuid,
     ) -> Result<LogContent, StorageEngineErrors>;
+    async fn store_project_lane(
+        &self,
+        project_name: String,
+        timestamp: String,
+    ) -> Result<uuid::Uuid, StorageEngineErrors>;
+    async fn get_all_project_lanes(
+        &self,
+    ) -> Result<HashMap<uuid::Uuid, String>, StorageEngineErrors>;
 }
 
 #[cfg(test)]
