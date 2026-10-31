@@ -51,10 +51,10 @@ impl SharedLog for AgentRecorder {
 
         let storage = self.storage.clone();
         let handle = tokio::spawn(async move {
-            if let Some(engine) = storage.get() {
-                if let Err(err) = engine.store_event(event.as_ref(), project_lane).await {
-                    tracing::error!("unable to store event: {:?}", err);
-                }
+            if let Some(engine) = storage.get()
+                && let Err(err) = engine.store_event(event.as_ref(), project_lane).await
+            {
+                tracing::error!("unable to store event: {:?}", err);
             }
         });
         tokio::task::block_in_place(|| {
@@ -113,13 +113,12 @@ impl SharedLog for AgentRecorder {
                 agent_event_id,
                 user_event_id
             );
-            if let Some(engine) = storage.get() {
-                if let Err(err) = engine
+            if let Some(engine) = storage.get()
+                && let Err(err) = engine
                     .store_cached_agent_response(agent_event_id, user_event_id, project_lane)
                     .await
-                {
-                    tracing::error!("unable to store cached agent response: {:?}", err);
-                }
+            {
+                tracing::error!("unable to store cached agent response: {:?}", err);
             }
             tracing::info!("inserted agent output.")
         });
