@@ -9,3 +9,4 @@ pub mod recorder_http_resp_handler;
 pub mod retrieval_engine;
 mod shared_log;
 pub mod storage;
+pub mod llm;
