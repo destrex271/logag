@@ -3,6 +3,7 @@ pub mod event_aggregator;
 pub mod global_config;
 pub(crate) mod harnesses;
 pub mod language_handler;
+pub mod llm;
 pub mod observability;
 pub mod project_management;
 pub mod recorder_http_resp_handler;
