@@ -49,7 +49,7 @@ impl CloudflareWorker {
             }
         };
         CloudflareWorker {
-            model_identifier: model_identifier,
+            model_identifier,
             http_client: reqwest::Client::new(),
             cf_account_id: acc_id.to_string(),
             cf_api_key: api_key.to_string(),
@@ -84,13 +84,13 @@ impl CloudflareWorker {
 }
 
 impl LLMWorker for CloudflareWorker {
-    fn generate_tier1(self, content: String) -> String {
-        return "".to_string();
+    fn generate_tier1(self, _content: String) -> String {
+        "".to_string()
     }
-    fn generate_tier2(self, content: String) -> String {
-        return "".to_string();
+    fn generate_tier2(self, _content: String) -> String {
+        "".to_string()
     }
-    fn generate_tier3(self, content: String) -> String {
-        return "".to_string();
+    fn generate_tier3(self, _content: String) -> String {
+        "".to_string()
     }
 }

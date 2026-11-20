@@ -22,12 +22,7 @@ impl LanguageService {
     pub fn is_input_valueable(&self, content: &str) -> bool {
         let formatted_content = self.format_content(content);
         // This is naive and NOT AT ALL A GOOD CHECK.
-        if formatted_content.is_empty()
-            || (self.split_tokens(&formatted_content).len() as isize) < TOKEN_COUNT_THRESHOLD
-        {
-            return false;
-        }
-        true
+        !(formatted_content.is_empty() || (self.split_tokens(&formatted_content).len() as isize) < TOKEN_COUNT_THRESHOLD)
     }
 
     fn split_tokens(&self, content: &str) -> Vec<String> {
