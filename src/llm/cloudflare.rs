@@ -32,7 +32,7 @@ struct CFWorkersAIResponseSnippet {
     response: String,
 }
 
-impl CloudflareWorker {
+impl CloudflareWorker{
     pub fn new(model_identifier: String) -> Self {
         let acc_id = match CF_ACCOUNT_ID {
             Some(val) => val,
@@ -55,8 +55,11 @@ impl CloudflareWorker {
             cf_api_key: api_key.to_string(),
         }
     }
+}
 
-    pub async fn send_request(&self, body: String) -> Result<String, LLMWorkerErrors> {
+#[async_trait::async_trait]
+impl LLMWorker for CloudflareWorker {
+    async fn send_request(&self, body: String) -> Result<String, LLMWorkerErrors> {
         let url = String::from(BASE_URL)
             + self.cf_account_id.as_str()
             + POST_URL
@@ -80,17 +83,5 @@ impl CloudflareWorker {
 
         // Extract the generated text here
         Ok(response.result.response)
-    }
-}
-
-impl LLMWorker for CloudflareWorker {
-    fn generate_tier1(self, _content: String) -> String {
-        "".to_string()
-    }
-    fn generate_tier2(self, _content: String) -> String {
-        "".to_string()
-    }
-    fn generate_tier3(self, _content: String) -> String {
-        "".to_string()
     }
 }
