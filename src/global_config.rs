@@ -32,6 +32,16 @@ impl GlobalConfig {
             Err(err) => panic!("unable to parse config {}: {}", display, err),
         }
     }
+
+    pub fn fetch_bin_root(&self) -> String {
+        return std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+    }
 }
 
 #[cfg(test)]
